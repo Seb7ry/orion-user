@@ -9,6 +9,8 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
+import java.time.LocalDate;
+
 @Data
 @RequiredArgsConstructor
 @AllArgsConstructor
@@ -20,10 +22,12 @@ public class User {
     private String idUser;
     private String firstName;
     private String lastName;
+    private LocalDate birthDate;
     private int phone;
     private String email;
     private String image;
     private TypeSex sex;
+    private String password;
 
     @DBRef
     private Role role;

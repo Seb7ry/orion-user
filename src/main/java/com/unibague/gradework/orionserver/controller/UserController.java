@@ -30,7 +30,6 @@ public class UserController {
         return new ResponseEntity<>(userService.createActor(actor, roleName), HttpStatus.CREATED);
     }
 
-
     // Obtener todos los estudiantes
     @GetMapping("/students")
     public ResponseEntity<List<Student>> getAllStudents() {
