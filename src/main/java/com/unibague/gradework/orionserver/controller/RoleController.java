@@ -18,7 +18,7 @@ import java.util.List;
  * - @RequestMapping: Specifies the base path for all endpoints in this controller.
  */
 @RestController
-@RequestMapping("/api/roles")
+@RequestMapping("/service/roles")
 public class RoleController {
 
     @Autowired

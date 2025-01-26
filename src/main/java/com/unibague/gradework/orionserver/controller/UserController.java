@@ -20,7 +20,7 @@ import java.util.List;
  * - @RequestMapping: Specifies the base path for all endpoints in this controller (/api/users).
  */
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/service/users")
 public class UserController {
 
     @Autowired
