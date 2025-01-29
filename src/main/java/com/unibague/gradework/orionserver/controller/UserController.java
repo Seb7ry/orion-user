@@ -1,15 +1,19 @@
 package com.unibague.gradework.orionserver.controller;
 
 import com.unibague.gradework.orionserver.model.Actors;
+import com.unibague.gradework.orionserver.model.Role;
 import com.unibague.gradework.orionserver.model.Student;
 import com.unibague.gradework.orionserver.model.User;
-import com.unibague.gradework.orionserver.service.UserService;
+import com.unibague.gradework.orionserver.interfaces.UserService;
+import com.unibague.gradework.orionserver.service.ProgramService;
+import com.unibague.gradework.orionserver.service.RoleServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The UserController class handles HTTP requests related to user management.
@@ -26,28 +30,81 @@ public class UserController {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private ProgramService programService;
+    @Autowired
+    private RoleServiceImpl roleServiceImpl;
+
     /**
-     * Creates a new student and assigns a specific role.
+     * Creates a new student, assigns a specific role, and optionally associates programs with the student.
      *
-     * @param student the Student object containing the student's details.
-     * @param roleName the name of the role to assign to the student.
+     * @param student the Student object containing the student's details including role ID.
      * @return a ResponseEntity containing the created Student object and HTTP status 201 (Created).
      */
     @PostMapping("/students")
-    public ResponseEntity<Student> createStudent(@RequestBody Student student, @RequestParam String roleName) {
-        return new ResponseEntity<>(userService.createStudent(student, roleName), HttpStatus.CREATED);
+    public ResponseEntity<?> createStudent(@RequestBody Student student) {
+        try {
+            if (student.getProgramId() != null && !student.getProgramId().isEmpty()) {
+                programService.getProgramByIds(student.getProgramId());
+            }
+
+            if (student.getRole() == null || student.getRole().getIdRole() == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Role ID is required in the request body.");
+            }
+
+            Optional<Role> role = roleServiceImpl.getRoleById(student.getRole().getIdRole());
+            if (role.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Invalid role ID: " + student.getRole().getIdRole());
+            }
+
+            student.setRole(role.get());
+
+            return new ResponseEntity<>(userService.createStudent(student), HttpStatus.CREATED);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Invalid program ID(s): " + e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("An error occurred: " + e.getMessage());
+        }
     }
 
     /**
-     * Creates a new actor and assigns a specific role.
+     * Creates a new actor, assigns a specific role, and optionally associates programs with the actor.
      *
-     * @param actor the Actors object containing the actor's details.
-     * @param roleName the name of the role to assign to the actor.
+     * @param actor the Actors object containing the actor's details including role ID.
      * @return a ResponseEntity containing the created Actors object and HTTP status 201 (Created).
      */
     @PostMapping("/actors")
-    public ResponseEntity<Actors> createActor(@RequestBody Actors actor, @RequestParam String roleName) {
-        return new ResponseEntity<>(userService.createActor(actor, roleName), HttpStatus.CREATED);
+    public ResponseEntity<?> createActor(@RequestBody Actors actor) {
+        try {
+            if (actor.getProgramId() != null && !actor.getProgramId().isEmpty()) {
+                programService.getProgramByIds(actor.getProgramId());
+            }
+
+            if (actor.getRole() == null || actor.getRole().getIdRole() == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Role ID is required in the request body.");
+            }
+
+            Optional<Role> role = roleServiceImpl.getRoleById(actor.getRole().getIdRole());
+            if (role.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Invalid role ID: " + actor.getRole().getIdRole());
+            }
+
+            actor.setRole(role.get());
+
+            return new ResponseEntity<>(userService.createActor(actor), HttpStatus.CREATED);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Invalid program ID(s): " + e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("An error occurred: " + e.getMessage());
+        }
     }
 
     /**
@@ -82,6 +139,27 @@ public class UserController {
         return userService.getUserById(id)
                 .map(user -> new ResponseEntity<>(user, HttpStatus.OK))
                 .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
+    }
+
+    /**
+     * Retrieves all programs associated with a specific user.
+     *
+     * @param userId the unique identifier of the user.
+     * @return a ResponseEntity containing the list of programs and HTTP status 200 (OK) or an error message.
+     */
+    @GetMapping("/{userId}/programs")
+    public ResponseEntity<?> getUserPrograms(@PathVariable String userId) {
+        try {
+            User user = userService.getUserById(userId)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
+            return ResponseEntity.ok(programService.getProgramByIds(user.getProgramId()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("An error occurred: " + e.getMessage());
+        }
     }
 
     /**

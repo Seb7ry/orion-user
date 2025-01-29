@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * The User class represents a generic user entity in the system.
@@ -57,7 +58,7 @@ public class User {
     /**
      * The user's phone number.
      */
-    private int phone;
+    private String phone;
 
     /**
      * The email address of the user.
@@ -88,4 +89,19 @@ public class User {
      */
     @DBRef
     private Role role;
+
+    /**
+     * List of program IDs associated with the user.
+     *
+     * This field stores references to programs that the user is enrolled in or affiliated with.
+     * Instead of using @DBRef, only the program IDs are stored as Strings to avoid unnecessary
+     * complexity and improve performance in MongoDB queries.
+     *
+     * Example:
+     * - A student may be enrolled in multiple programs.
+     * - An actor (employee) may be assigned to different programs.
+     *
+     * The IDs stored in this list should correspond to valid entries in the "programs" collection.
+     */
+    private List<String> programId;
 }

@@ -15,5 +15,5 @@ import org.springframework.stereotype.Repository;
  *   allowing it to be discovered and injected where required.
  */
 @Repository
-public interface UserRepository extends MongoRepository<User, Long> {
+public interface UserRepository extends MongoRepository<User, String> {
 }

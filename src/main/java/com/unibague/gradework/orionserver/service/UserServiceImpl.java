@@ -1,5 +1,6 @@
 package com.unibague.gradework.orionserver.service;
 
+import com.unibague.gradework.orionserver.interfaces.UserService;
 import com.unibague.gradework.orionserver.model.Actors;
 import com.unibague.gradework.orionserver.model.Role;
 import com.unibague.gradework.orionserver.model.Student;
@@ -36,32 +37,28 @@ public class UserServiceImpl implements UserService {
     @Autowired
     private ActorsRepository actorsRepository;
 
-    /**
-     * Creates a new student and assigns a specific role.
-     *
-     * @param student the Student object containing the student's details.
-     * @param roleName the name of the role to assign to the student.
-     * @return the created Student object.
-     */
     @Override
-    public Student createStudent(Student student, String roleName) {
-        Role role = roleRepository.findByName(roleName)
-                .orElseThrow(() -> new RuntimeException("Role " + roleName + " not found"));
+    public Student createStudent(Student student) {
+        if (student.getRole() == null || student.getRole().getIdRole() == null || student.getRole().getIdRole().isEmpty()) {
+            throw new RuntimeException("Role ID is required");
+        }
+
+        Role role = roleRepository.findById(student.getRole().getIdRole())
+                .orElseThrow(() -> new RuntimeException("Role with ID " + student.getRole().getIdRole() + " not found"));
+
         student.setRole(role);
         return studentRepository.save(student);
     }
 
-    /**
-     * Creates a new actor and assigns a specific role.
-     *
-     * @param actor the Actors object containing the actor's details.
-     * @param roleName the name of the role to assign to the actor.
-     * @return the created Actors object.
-     */
     @Override
-    public Actors createActor(Actors actor, String roleName) {
-        Role role = roleRepository.findByName(roleName)
-                .orElseThrow(() -> new RuntimeException("Role " + roleName + " not found"));
+    public Actors createActor(Actors actor) {
+        if (actor.getRole() == null || actor.getRole().getIdRole() == null || actor.getRole().getIdRole().isEmpty()) {
+            throw new RuntimeException("Role ID is required");
+        }
+
+        Role role = roleRepository.findById(actor.getRole().getIdRole())
+                .orElseThrow(() -> new RuntimeException("Role with ID " + actor.getRole().getIdRole() + " not found"));
+
         actor.setRole(role);
         return actorsRepository.save(actor);
     }
@@ -94,7 +91,7 @@ public class UserServiceImpl implements UserService {
      */
     @Override
     public Optional<User> getUserById(String id) {
-        return userRepository.findById(Long.valueOf(id));
+        return userRepository.findById(id);
     }
 
     /**

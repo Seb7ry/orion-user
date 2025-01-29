@@ -1,5 +1,6 @@
 package com.unibague.gradework.orionserver.service;
 
+import com.unibague.gradework.orionserver.interfaces.RoleService;
 import com.unibague.gradework.orionserver.model.Role;
 import com.unibague.gradework.orionserver.repository.RoleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,7 +55,7 @@ public class RoleServiceImpl implements RoleService {
      */
     @Override
     public Optional<Role> getRoleById(String id) {
-        return roleRepository.findById(Long.valueOf(id));
+        return roleRepository.findById(id);
     }
 
     /**
@@ -68,7 +69,7 @@ public class RoleServiceImpl implements RoleService {
      */
     @Override
     public Optional<Role> updateRole(String id, Role roleDetails) {
-        return roleRepository.findById(Long.valueOf(id)).map(existingRole -> {
+        return roleRepository.findById(id).map(existingRole -> {
             existingRole.setName(roleDetails.getName());
             return roleRepository.save(existingRole);
         });
@@ -81,6 +82,6 @@ public class RoleServiceImpl implements RoleService {
      */
     @Override
     public void deleteRole(String id) {
-        roleRepository.deleteById(Long.valueOf(id));
+        roleRepository.deleteById(id);
     }
 }

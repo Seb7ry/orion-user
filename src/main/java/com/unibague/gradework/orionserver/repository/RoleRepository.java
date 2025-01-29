@@ -18,7 +18,7 @@ import java.util.Optional;
  *   allowing it to be discovered and injected where needed.
  */
 @Repository
-public interface RoleRepository extends MongoRepository<Role, Long> {
+public interface RoleRepository extends MongoRepository<Role, String> {
 
     /**
      * Finds a role by its name.

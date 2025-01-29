@@ -1,7 +1,7 @@
 package com.unibague.gradework.orionserver.controller;
 
 import com.unibague.gradework.orionserver.model.Role;
-import com.unibague.gradework.orionserver.service.RoleService;
+import com.unibague.gradework.orionserver.interfaces.RoleService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
