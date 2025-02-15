@@ -33,7 +33,7 @@ public class Student extends User {
      * Unique identifier for the student.
      * Used to associate the student with academic records or activities.
      */
-    private Long studentID;
+    private String studentID;
 
     /**
      * The enrollment status of the student.

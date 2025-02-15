@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
 /**
- * The Actors class represents an employee entity in the system.
+ * The Actor class represents an employee entity in the system.
  * It extends the User class and includes additional attributes specific to employees.
  *
  * An instance of this class corresponds to a document in the "actors" collection in MongoDB.
@@ -27,13 +27,13 @@ import lombok.experimental.SuperBuilder;
 @EqualsAndHashCode(callSuper = true)
 @SuperBuilder
 @Document(collection = "actors")
-public class Actors extends User {
+public class Actor extends User {
 
     /**
      * Unique identifier for the employee.
      * Used to associate the employee with specific records or activities.
      */
-    private Long employeeId;
+    private String employeeId;
 
     /**
      * The position or job title of the employee within the organization.

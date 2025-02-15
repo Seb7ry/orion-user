@@ -1,4 +1,4 @@
-package com.unibague.gradework.orionserver.interfaces;
+package com.unibague.gradework.orionserver.service;
 
 import com.unibague.gradework.orionserver.model.Role;
 
@@ -6,10 +6,10 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * The RoleService interface defines the business logic for managing roles in the system.
+ * The IRoleService interface defines the business logic for managing roles in the system.
  * It provides methods for creating, retrieving, updating, and deleting roles.
  */
-public interface RoleService {
+public interface IRoleService {
 
     /**
      * Creates a new role in the system.

@@ -1,11 +1,13 @@
 package com.unibague.gradework.orionserver.service;
 
-import com.unibague.gradework.orionserver.interfaces.IProgramService;
+import com.unibague.gradework.orionserver.model.ProgramDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Service class responsible for handling program-related operations.
@@ -21,7 +23,8 @@ public class ProgramService implements IProgramService {
 
     /**
      * RestTemplate is used to make HTTP requests to the external "Program" microservice.
-     */    @Autowired
+     */
+    @Autowired
     private RestTemplate restTemplate;
 
     /**
@@ -31,32 +34,42 @@ public class ProgramService implements IProgramService {
     private static final String PROGRAM_SERVICE_URL="http://localhost:8090/service/program";
 
     /**
-     * Retrieves a program by its unique identifier.
-     *
-     * This method makes an HTTP GET request to the "Program" microservice to fetch
-     * details of a specific program using its ID.
+     * Retrieves a program by its unique identifier and converts it into a ProgramDTO.
      *
      * @param programId The unique identifier of the program.
-     * @return The program object retrieved from the microservice.
+     * @return A ProgramDTO containing the program details, or null if not found.
      */
     @Override
-    public Object getProgramId(String programId) {
-        return restTemplate.getForEntity(PROGRAM_SERVICE_URL + "/" + programId, Object.class).getBody();
+    public ProgramDTO fetchProgramDetails(String programId) {
+        System.out.println("Fetching program details for ID: " + programId);
+        try {
+            Object programData = restTemplate.getForEntity(PROGRAM_SERVICE_URL + "/" + programId, Object.class).getBody();
+
+            if (programData instanceof LinkedHashMap<?, ?> programMap) {
+                System.out.println("Program Data: " + programMap);
+                return new ProgramDTO(
+                        (String) programMap.get("programId"),
+                        (String) programMap.get("programName"));
+            }
+        } catch (Exception e) {
+            System.out.println("Error fetching program details for ID " + programId + ": " + e.getMessage());
+        }
+
+        System.out.println("Program not found for ID: " + programId);
+        return null;
     }
 
     /**
      * Retrieves a list of programs based on their unique identifiers.
      *
-     * This method makes multiple HTTP GET requests to the "Program" microservice
-     * to fetch details of all specified program IDs.
-     *
      * @param programIds A list of program IDs to fetch details for.
-     * @return A list of program objects retrieved from the microservice.
+     * @return A list of ProgramDTO objects.
      */
     @Override
-    public List<Object> getProgramByIds(List<String> programIds) {
+    public List<ProgramDTO> getProgramByIds(List<String> programIds) {
         return programIds.stream()
-                .map(id -> restTemplate.getForEntity(PROGRAM_SERVICE_URL + "/" + id, Object.class).getBody())
+                .map(this::fetchProgramDetails)  // Ahora usamos solo `fetchProgramDetails`
+                .filter(Objects::nonNull)
                 .toList();
     }
 }

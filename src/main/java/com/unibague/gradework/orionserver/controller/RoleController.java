@@ -1,7 +1,7 @@
 package com.unibague.gradework.orionserver.controller;
 
 import com.unibague.gradework.orionserver.model.Role;
-import com.unibague.gradework.orionserver.interfaces.RoleService;
+import com.unibague.gradework.orionserver.service.IRoleService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,11 +18,11 @@ import java.util.List;
  * - @RequestMapping: Specifies the base path for all endpoints in this controller.
  */
 @RestController
-@RequestMapping("/service/roles")
+@RequestMapping("/service/role")
 public class RoleController {
 
     @Autowired
-    private RoleService roleService;
+    private IRoleService roleService;
 
     /**
      * Creates a new role.
