@@ -13,20 +13,14 @@ import java.util.Optional;
 import java.util.Objects;
 
 /**
- * The UserService class provides the implementation of the IUserService interface.
- * It handles the business logic for managing users, including students and actors.
- *
- * Annotations:
- * - @Service: Marks this class as a Spring service, enabling it to be managed by the Spring container.
+ * Implementation of the {@link IUserService} interface that provides user management functionalities,
+ * including operations for students and actors.
  */
 @Service
 public class UserService implements IUserService {
 
     @Autowired
     private ProgramService programService;
-
-    @Autowired
-    private UserRepository userRepository;
 
     @Autowired
     private RoleRepository roleRepository;
@@ -37,36 +31,75 @@ public class UserService implements IUserService {
     @Autowired
     private ActorRepository actorsRepository;
 
-    @Override
-    public Student createStudent(Student student) {
-        if (student.getRole() == null || student.getRole().getIdRole() == null || student.getRole().getIdRole().isEmpty()) {
-            throw new RuntimeException("Role ID is required");
+    @Autowired
+    private UserRepository userRepository;
+
+    /**
+     * Validates whether the given role exists in the database.
+     *
+     * @param role The role to be validated.
+     * @return The existing {@link Role} entity.
+     * @throws IllegalArgumentException if the role ID is null, empty, or does not exist.
+     */
+    protected Role validateRole(Role role) {
+        if(role == null || role.getIdRole() == null || role.getIdRole().trim().isEmpty()) {
+            throw new IllegalArgumentException("Role id is required.");
+        }
+        return roleRepository.findById(role.getIdRole())
+                .orElseThrow(() -> new IllegalArgumentException("Role with ID " + role.getIdRole() + " not found"));
+    }
+
+    /**
+     * Validates whether an email is unique in the system.
+     *
+     * @param email The email to be validated.
+     * @throws IllegalArgumentException if the email is null, empty, or already exists in the database.
+     */
+    protected void validateEmail(String email) {
+        if(email == null || email.trim().isEmpty()){
+            throw new IllegalArgumentException("Email is required.");
         }
 
-        Role role = roleRepository.findById(student.getRole().getIdRole())
-                .orElseThrow(() -> new RuntimeException("Role with ID " + student.getRole().getIdRole() + " not found"));
+        boolean emailExists = studentRepository.existsByEmail(email) || actorsRepository.existsByEmail(email);
+        if(emailExists){
+           throw new IllegalArgumentException("A user with email " + email + " already exists.");
+        }
+    }
+
+    /**
+     * Creates a new student with the specified role after validation.
+     *
+     * @param student The student to be created.
+     * @return The newly created {@link Student}.
+     */
+    @Override
+    public Student createStudent(Student student) {
+        validateEmail(student.getEmail());
+        Role role = validateRole(student.getRole());
 
         student.setRole(role);
         return studentRepository.save(student);
     }
 
+    /**
+     * Creates a new actor with the specified role after validation.
+     *
+     * @param actor The actor to be created.
+     * @return The newly created {@link Actor}.
+     */
     @Override
     public Actor createActor(Actor actor) {
-        if (actor.getRole() == null || actor.getRole().getIdRole() == null || actor.getRole().getIdRole().isEmpty()) {
-            throw new RuntimeException("Role ID is required");
-        }
-
-        Role role = roleRepository.findById(actor.getRole().getIdRole())
-                .orElseThrow(() -> new RuntimeException("Role with ID " + actor.getRole().getIdRole() + " not found"));
+        validateEmail(actor.getEmail());
+        Role role = validateRole(actor.getRole());
 
         actor.setRole(role);
         return actorsRepository.save(actor);
     }
 
     /**
-     * Retrieves all students.
+     * Retrieves all students and converts them into DTOs.
      *
-     * @return a list of StudentDTO objects.
+     * @return A list of {@link StudentDTO} objects.
      */
     @Override
     public List<StudentDTO> getAllStudentsDTO() {
@@ -98,9 +131,9 @@ public class UserService implements IUserService {
     }
 
     /**
-     * Retrieves all actors.
+     * Retrieves all actors and converts them into DTOs.
      *
-     * @return a list of ActorDTO objects.
+     * @return A list of {@link ActorDTO} objects.
      */
     @Override
     public List<ActorDTO> getAllActorsDTO() {
@@ -130,10 +163,10 @@ public class UserService implements IUserService {
     }
 
     /**
-     * Retrieves a studentDTO by their ID.
+     * Retrieves a student DTO by its ID.
      *
-     * @param id the unique identifier of the user.
-     * @return an Optional containing the StudentDTO object if found, or empty if not.
+     * @param id The student's unique identifier.
+     * @return An {@link Optional} containing the {@link StudentDTO} if found.
      */
     @Override
     public Optional<StudentDTO> getStudentDTOById(String id) {
@@ -164,10 +197,10 @@ public class UserService implements IUserService {
     }
 
     /**
-     * Retrieves an ActorDTO by their ID.
+     * Retrieves an actor DTO by its ID.
      *
-     * @param id the unique identifier of the user.
-     * @return an Optional containing the ActorDTO object if found, or empty if not.
+     * @param id The actor's unique identifier.
+     * @return An {@link Optional} containing the {@link ActorDTO} if found.
      */
     @Override
     public Optional<ActorDTO> getActorDTOById(String id) {
@@ -196,10 +229,10 @@ public class UserService implements IUserService {
     }
 
     /**
-     * Retrieves a student by their ID.
+     * Retrieves a student by their unique identifier.
      *
-     * @param id the unique identifier of the user.
-     * @return an Optional containing the Student object if found, or empty if not.
+     * @param id The unique identifier of the student.
+     * @return An {@link Optional} containing the {@link Student} if found, or an empty {@link Optional} if not.
      */
     @Override
     public Optional<Student> getStudentById(String id) {
@@ -207,16 +240,22 @@ public class UserService implements IUserService {
     }
 
     /**
-     * Retrieves an actor by their ID.
+     * Retrieves an actor by their unique identifier.
      *
-     * @param id the unique identifier of the user.
-     * @return an Optional containing the Actor object if found, or empty if not.
+     * @param id The unique identifier of the actor.
+     * @return An {@link Optional} containing the {@link Actor} if found, or an empty {@link Optional} if not.
      */
     @Override
     public Optional<Actor> getActorById(String id) {
         return actorsRepository.findById(id);
     }
 
+    /**
+     * Finds a user (either a Student or an Actor) by their email address.
+     *
+     * @param email The email address of the user.
+     * @return An {@link Optional} containing the {@link User} if found, or an empty {@link Optional} if not.
+     */
     @Override
     public Optional<User> findUserByEmail(String email) {
         return studentRepository.findByEmail(email)
@@ -226,16 +265,37 @@ public class UserService implements IUserService {
     }
 
     /**
-     * Updates an existing student's details.
+     * Validates whether an email is unique when updating a user.
      *
-     * @param id the unique identifier of the student.
-     * @param studentDetails the updated Student object.
-     * @return the updated Student object.
+     * @param existingEmail The current email of the user.
+     * @param newEmail The new email being updated.
+     * @throws IllegalArgumentException if the new email is already in use by another user.
+     */
+    private void validateEmailOnUpdate(String existingEmail, String newEmail) {
+        if (!existingEmail.equals(newEmail)) {
+            boolean emailExistsInStudents = studentRepository.existsByEmail(newEmail);
+            boolean emailExistsInActors = actorsRepository.existsByEmail(newEmail);
+
+            if (emailExistsInStudents || emailExistsInActors) {
+                throw new IllegalArgumentException("The email " + newEmail + " is already in use by another user.");
+            }
+        }
+    }
+
+    /**
+     * Updates an existing student's information.
+     *
+     * @param id The unique identifier of the student to update.
+     * @param studentDetails A {@link Student} object containing the updated details.
+     * @return The updated {@link Student} object.
+     * @throws RuntimeException if the student with the given ID does not exist.
      */
     @Override
     public Student updateStudent(String id, Student studentDetails) {
         Student existingStudent = studentRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Student with ID " + id + " not found"));
+
+        validateEmailOnUpdate(existingStudent.getEmail(), studentDetails.getEmail());
 
         existingStudent.setFirstName(studentDetails.getFirstName());
         existingStudent.setLastName(studentDetails.getLastName());
@@ -252,16 +312,19 @@ public class UserService implements IUserService {
     }
 
     /**
-     * Updates an existing actor's details.
+     * Updates an existing actor's information.
      *
-     * @param id the unique identifier of the actor.
-     * @param actorDetails the updated Actor object.
-     * @return the updated Actor object.
+     * @param id The unique identifier of the actor to update.
+     * @param actorDetails An {@link Actor} object containing the updated details.
+     * @return The updated {@link Actor} object.
+     * @throws RuntimeException if the actor with the given ID does not exist.
      */
     @Override
     public Actor updateActor(String id, Actor actorDetails) {
         Actor existingActor = actorsRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Actor with ID " + id + " not found"));
+
+        validateEmailOnUpdate(existingActor.getEmail(), actorDetails.getEmail());
 
         existingActor.setFirstName(actorDetails.getFirstName());
         existingActor.setLastName(actorDetails.getLastName());
@@ -276,9 +339,10 @@ public class UserService implements IUserService {
     }
 
     /**
-     * Deletes a student by their ID.
+     * Deletes a student from the system based on their unique identifier.
      *
-     * @param id the unique identifier of the student.
+     * @param id The unique identifier of the student to delete.
+     * @throws RuntimeException if the student with the given ID does not exist.
      */
     @Override
     public void deleteStudent(String id) {
@@ -288,9 +352,10 @@ public class UserService implements IUserService {
     }
 
     /**
-     * Deletes an actor by their ID.
+     * Deletes an actor from the system based on their unique identifier.
      *
-     * @param id the unique identifier of the actor.
+     * @param id The unique identifier of the actor to delete.
+     * @throws RuntimeException if the actor with the given ID does not exist.
      */
     @Override
     public void deleteActor(String id) {

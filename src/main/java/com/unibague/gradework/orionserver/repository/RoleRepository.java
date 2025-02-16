@@ -19,12 +19,4 @@ import java.util.Optional;
  */
 @Repository
 public interface RoleRepository extends MongoRepository<Role, String> {
-
-    /**
-     * Finds a role by its name.
-     *
-     * @param name the name of the role to search for.
-     * @return an Optional containing the Role object if found, or an empty Optional if not.
-     */
-    Optional<Role> findByName(String name);
 }

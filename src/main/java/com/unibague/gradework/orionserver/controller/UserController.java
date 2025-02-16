@@ -17,8 +17,8 @@ import java.util.Optional;
  * It provides endpoints to create, retrieve, update, and delete students and actors.
  *
  * Annotations:
- * - @RestController: Marks this class as a RESTful controller.
- * - @RequestMapping: Specifies the base path for all endpoints in this controller (/api/users).
+ * - {@link RestController}: Marks this class as a RESTful controller.
+ * - {@link RequestMapping}: Specifies the base path for all endpoints in this controller (/service/user).
  */
 @RestController
 @RequestMapping("/service/user")
@@ -31,34 +31,45 @@ public class UserController {
     private ProgramService programService;
 
     @Autowired
-    private RoleService roleServiceImpl;
+    private RoleService roleService;
 
     /**
-     * Creates a new student, assigns a specific role, and optionally associates programs with the student.
+     * Validates user role and programs before processing.
      *
-     * @param student the Student object containing the student's details including role ID.
-     * @return a ResponseEntity containing the created Student object and HTTP status 201 (Created).
+     * @param user The user object (Student or Actor) to validate.
+     * @return A {@link ResponseEntity} containing an error message if validation fails, or null if validation passes.
      */
-    @PostMapping("/students")
+    private ResponseEntity<?> validateUser(User user){
+        if(user.getRole() == null || user.getRole().getIdRole() == null){
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Role ID is required in the request body.");
+        }
+
+        Optional<Role> role = roleService.getRoleById(user.getRole().getIdRole());
+        if(role.isEmpty()){
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid role ID: " + user.getRole().getIdRole());
+        }
+
+        user.setRole(role.get());
+
+        if(user.getProgramId() != null && !user.getProgramId().isEmpty()){
+            programService.getProgramByIds(user.getProgramId());
+        }
+        return null;
+    }
+
+    /**
+     * Creates a new student.
+     *
+     * @param student The {@link Student} object containing student details.
+     * @return A {@link ResponseEntity} with the created student or an error message.
+     */
+    @PostMapping("/student")
     public ResponseEntity<?> createStudent(@RequestBody Student student) {
         try {
-            if (student.getProgramId() != null && !student.getProgramId().isEmpty()) {
-                programService.getProgramByIds(student.getProgramId());
+            ResponseEntity<?> validation = validateUser(student);
+            if(validation != null){
+                return validation;
             }
-
-            if (student.getRole() == null || student.getRole().getIdRole() == null) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body("Role ID is required in the request body.");
-            }
-
-            Optional<Role> role = roleServiceImpl.getRoleById(student.getRole().getIdRole());
-            if (role.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body("Invalid role ID: " + student.getRole().getIdRole());
-            }
-
-            student.setRole(role.get());
-
             return new ResponseEntity<>(userService.createStudent(student), HttpStatus.CREATED);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -70,31 +81,18 @@ public class UserController {
     }
 
     /**
-     * Creates a new actor, assigns a specific role, and optionally associates programs with the actor.
+     * Creates a new actor.
      *
-     * @param actor the Actor object containing the actor's details including role ID.
-     * @return a ResponseEntity containing the created Actor object and HTTP status 201 (Created).
+     * @param actor The {@link Actor} object containing actor details.
+     * @return A {@link ResponseEntity} with the created actor or an error message.
      */
-    @PostMapping("/actors")
+    @PostMapping("/actor")
     public ResponseEntity<?> createActor(@RequestBody Actor actor) {
         try {
-            if (actor.getProgramId() != null && !actor.getProgramId().isEmpty()) {
-                programService.getProgramByIds(actor.getProgramId());
+            ResponseEntity<?> validation = validateUser(actor);
+            if(validation != null){
+                return validation;
             }
-
-            if (actor.getRole() == null || actor.getRole().getIdRole() == null) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body("Role ID is required in the request body.");
-            }
-
-            Optional<Role> role = roleServiceImpl.getRoleById(actor.getRole().getIdRole());
-            if (role.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body("Invalid role ID: " + actor.getRole().getIdRole());
-            }
-
-            actor.setRole(role.get());
-
             return new ResponseEntity<>(userService.createActor(actor), HttpStatus.CREATED);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -108,7 +106,7 @@ public class UserController {
     /**
      * Retrieves all students.
      *
-     * @return a ResponseEntity containing a list of all StudentDTO objects and HTTP status 200 (OK).
+     * @return A {@link ResponseEntity} containing a list of {@link StudentDTO} objects.
      */
     @GetMapping("/students")
     public ResponseEntity<List<StudentDTO>> getAllStudentsDTO() {
@@ -118,13 +116,19 @@ public class UserController {
     /**
      * Retrieves all actors.
      *
-     * @return a ResponseEntity containing a list of all ActorDTO objects and HTTP status 200 (OK).
+     * @return A {@link ResponseEntity} containing a list of {@link ActorDTO} objects.
      */
     @GetMapping("/actors")
     public ResponseEntity<List<ActorDTO>> getAllActorsDTO() {
         return ResponseEntity.ok(userService.getAllActorsDTO());
     }
 
+    /**
+     * Retrieves a student DTO by ID.
+     *
+     * @param id The unique identifier of the student.
+     * @return A {@link ResponseEntity} containing the {@link StudentDTO} or a 404 status if not found.
+     */
     @GetMapping("/student/{id}")
     public ResponseEntity<StudentDTO> getStudentDTOById(@PathVariable String id) {
         return userService.getStudentDTOById(id)
@@ -132,6 +136,12 @@ public class UserController {
                 .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
+    /**
+     * Retrieves an actor DTO by ID.
+     *
+     * @param id The unique identifier of the actor.
+     * @return A {@link ResponseEntity} containing the {@link ActorDTO} or a 404 status if not found.
+     */
     @GetMapping("/actor/{id}")
     public ResponseEntity<ActorDTO> getActorDTOById(@PathVariable String id) {
         return userService.getActorDTOById(id)
@@ -139,6 +149,12 @@ public class UserController {
                 .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
+    /**
+     * Retrieves a student by their unique identifier.
+     *
+     * @param id The unique identifier of the student.
+     * @return A {@link ResponseEntity} containing the {@link Student} if found, or HTTP status 404 (Not Found) if not.
+     */
     @GetMapping("/student/auth/{id}")
     public ResponseEntity<Student> getStudentById(@PathVariable String id) {
         return userService.getStudentById(id)
@@ -146,6 +162,12 @@ public class UserController {
                 .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
+    /**
+     * Retrieves an actor by their unique identifier.
+     *
+     * @param id The unique identifier of the actor.
+     * @return A {@link ResponseEntity} containing the {@link Actor} if found, or HTTP status 404 (Not Found) if not.
+     */
     @GetMapping("/actor/auth/{id}")
     public ResponseEntity<Actor> getActorById(@PathVariable String id) {
         return userService.getActorById(id)
@@ -154,41 +176,37 @@ public class UserController {
     }
 
     /**
-     * Retrieves all programs associated with a specific user.
+     * Retrieves all programs associated with a user.
      *
-     * @param userId the unique identifier of the user.
-     * @return a ResponseEntity containing the list of programs and HTTP status 200 (OK) or an error message.
+     * @param userId The unique identifier of the user.
+     * @return A {@link ResponseEntity} containing the list of programs or an error message.
      */
     @GetMapping("/{userId}/programs")
     public ResponseEntity<?> getUserPrograms(@PathVariable String userId) {
         try {
-            Optional<Student> studentOpt = userService.getStudentById(userId);
-            Optional<Actor> actorOpt = userService.getActorById(userId);
+            Optional<? extends User> userOpt = userService.getStudentById(userId)
+                    .map(student -> (User) student)
+                    .or(() -> userService.getActorById(userId).map(actor -> (User) actor));
 
-            if (studentOpt.isPresent()) {
-                Student student = studentOpt.get();
-                List<String> programIds = student.getProgramId();
-                List<ProgramDTO> programs = programService.getProgramByIds(programIds);
-
-                return ResponseEntity.ok(programs.isEmpty() ? List.of() : programs);
+            if (userOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found with ID: " + userId);
             }
 
-            if (actorOpt.isPresent()) {
-                Actor actor = actorOpt.get();
-                List<String> programIds = actor.getProgramId();
-                List<ProgramDTO> programs = programService.getProgramByIds(programIds);
+            List<String> programIds = userOpt.get().getProgramId();
+            List<ProgramDTO> programs = programService.getProgramByIds(programIds);
 
-                return ResponseEntity.ok(programs.isEmpty() ? List.of() : programs);
-            }
-
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body("User not found with ID: " + userId);
+            return ResponseEntity.ok(programs.isEmpty() ? List.of() : programs);
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("An error occurred: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("An error occurred: " + e.getMessage());
         }
     }
 
+    /**
+     * Retrieves a user by email.
+     *
+     * @param email The email address of the user.
+     * @return A {@link ResponseEntity} containing the {@link User} or an error message.
+     */
     @GetMapping("/auth/email/{email}")
     public ResponseEntity<?> getUserByEmail(@PathVariable String email) {
         Optional<User> userOptional = userService.findUserByEmail(email);
@@ -203,11 +221,11 @@ public class UserController {
     /**
      * Updates an existing student's details.
      *
-     * @param id the unique identifier of the student to update.
-     * @param studentDetails the updated Student object.
-     * @return a ResponseEntity containing the updated Student object and HTTP status 200 (OK).
+     * @param id             The unique identifier of the student to update.
+     * @param studentDetails The updated {@link Student} object containing new values.
+     * @return A {@link ResponseEntity} containing the updated {@link Student} object and HTTP status 200 (OK).
      */
-    @PutMapping("/students/{id}")
+    @PutMapping("/student/{id}")
     public ResponseEntity<Student> updateStudent(@PathVariable String id, @RequestBody Student studentDetails) {
         return new ResponseEntity<>(userService.updateStudent(id, studentDetails), HttpStatus.OK);
     }
@@ -215,34 +233,34 @@ public class UserController {
     /**
      * Updates an existing actor's details.
      *
-     * @param id the unique identifier of the actor to update.
-     * @param actorDetails the updated Actor object.
-     * @return a ResponseEntity containing the updated Actor object and HTTP status 200 (OK).
+     * @param id           The unique identifier of the actor to update.
+     * @param actorDetails The updated {@link Actor} object containing new values.
+     * @return A {@link ResponseEntity} containing the updated {@link Actor} object and HTTP status 200 (OK).
      */
-    @PutMapping("/actors/{id}")
+    @PutMapping("/actor/{id}")
     public ResponseEntity<Actor> updateActor(@PathVariable String id, @RequestBody Actor actorDetails) {
         return new ResponseEntity<>(userService.updateActor(id, actorDetails), HttpStatus.OK);
     }
 
     /**
-     * Deletes a student by their ID.
+     * Deletes a student by their unique identifier.
      *
-     * @param id the unique identifier of the student to delete.
-     * @return a ResponseEntity with HTTP status 204 (No Content) if the deletion is successful.
+     * @param id The unique identifier of the student to delete.
+     * @return A {@link ResponseEntity} with HTTP status 204 (No Content) if the deletion is successful.
      */
-    @DeleteMapping("/students/{id}")
+    @DeleteMapping("/student/{id}")
     public ResponseEntity<Void> deleteStudent(@PathVariable String id) {
         userService.deleteStudent(id);
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 
     /**
-     * Deletes an actor by their ID.
+     * Deletes an actor by their unique identifier.
      *
-     * @param id the unique identifier of the actor to delete.
-     * @return a ResponseEntity with HTTP status 204 (No Content) if the deletion is successful.
+     * @param id The unique identifier of the actor to delete.
+     * @return A {@link ResponseEntity} with HTTP status 204 (No Content) if the deletion is successful.
      */
-    @DeleteMapping("/actors/{id}")
+    @DeleteMapping("/actor/{id}")
     public ResponseEntity<Void> deleteActor(@PathVariable String id) {
         userService.deleteActor(id);
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);

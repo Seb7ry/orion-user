@@ -68,7 +68,7 @@ public class ProgramService implements IProgramService {
     @Override
     public List<ProgramDTO> getProgramByIds(List<String> programIds) {
         return programIds.stream()
-                .map(this::fetchProgramDetails)  // Ahora usamos solo `fetchProgramDetails`
+                .map(this::fetchProgramDetails)
                 .filter(Objects::nonNull)
                 .toList();
     }
