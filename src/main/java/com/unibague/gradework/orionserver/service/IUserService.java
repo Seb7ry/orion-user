@@ -23,7 +23,7 @@ public interface IUserService {
 
     Optional<Actor> getActorById(String id);
 
-    Optional<User> findUserByEmail(String email);
+    Optional<UserLogDTO> findUserByEmail(String email);
 
     Student updateStudent(String id, Student studentDetails);
 

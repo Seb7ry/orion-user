@@ -156,9 +156,56 @@ public class UserService implements IUserService {
     }
 
     @Override
-    public Optional<User> findUserByEmail(String email) {
-        return studentRepository.findByEmail(email).map(s -> (User) s)
-                .or(() -> actorsRepository.findByEmail(email).map(a -> (User) a));
+    public Optional<UserLogDTO> findUserByEmail(String email) {
+        Optional<Student> studentOpt = studentRepository.findByEmail(email);
+        if (studentOpt.isPresent()) {
+            Student student = studentOpt.get();
+            List<ProgramDTO> programDetails = programService.getProgramById(
+                    Optional.ofNullable(student.getPrograms()).orElse(List.of())
+            );
+
+            StudentLogDTO result = StudentLogDTO.builder()
+                    .idUser(student.getIdUser())
+                    .name(student.getName())
+                    .email(student.getEmail())
+                    .phone(student.getPhone())
+                    .image(student.getImage())
+                    .sex(student.getSex())
+                    .role(student.getRole())
+                    .password(student.getPassword())
+                    .programs(programDetails)
+                    .studentID(student.getStudentID())
+                    .status(student.isStatus())
+                    .semester(student.getSemester())
+                    .build();
+
+            return Optional.of(result);
+        }
+
+        Optional<Actor> actorOpt = actorsRepository.findByEmail(email);
+        if (actorOpt.isPresent()) {
+            Actor actor = actorOpt.get();
+            List<ProgramDTO> programDetails = programService.getProgramById(
+                    Optional.ofNullable(actor.getPrograms()).orElse(List.of())
+            );
+
+            ActorLogDTO result = ActorLogDTO.builder()
+                    .idUser(actor.getIdUser())
+                    .name(actor.getName())
+                    .email(actor.getEmail())
+                    .phone(actor.getPhone())
+                    .image(actor.getImage())
+                    .sex(actor.getSex())
+                    .role(actor.getRole())
+                    .password(actor.getPassword())
+                    .programs(programDetails)
+                    .position(actor.getPosition())
+                    .build();
+
+            return Optional.of(result);
+        }
+
+        return Optional.empty();
     }
 
     @Override
