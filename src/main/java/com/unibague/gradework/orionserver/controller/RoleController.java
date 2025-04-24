@@ -59,6 +59,13 @@ public class RoleController {
                 .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
+    @GetMapping("/name/{name}")
+    public ResponseEntity<Role> getRoleByName(@PathVariable String name) {
+        return roleService.getRoleByName(name)
+                .map(role -> new ResponseEntity<>(role, HttpStatus.OK))
+                .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
+    }
+
     /**
      * Updates an existing role by its ID.
      *

@@ -37,7 +37,12 @@ public class UserService implements IUserService {
 
         student.setRole(validationService.validateRole(student.getRole()));
         student.setPassword(passwordEncoder.encode(student.getPassword()));
-        student.setPrograms(Optional.ofNullable(student.getPrograms()).orElse(List.of()));
+
+        if (student.getPrograms() != null && !student.getPrograms().isEmpty()) {
+            student.setPrograms(student.getPrograms());
+        } else {
+            student.setPrograms(List.of());
+        }
 
         return studentRepository.save(student);
     }
@@ -49,7 +54,12 @@ public class UserService implements IUserService {
 
         actor.setRole(validationService.validateRole(actor.getRole()));
         actor.setPassword(passwordEncoder.encode(actor.getPassword()));
-        actor.setPrograms(Optional.ofNullable(actor.getPrograms()).orElse(List.of()));
+
+        if (actor.getPrograms() != null && !actor.getPrograms().isEmpty()) {
+            actor.setPrograms(actor.getPrograms());
+        } else {
+            actor.setPrograms(List.of());
+        }
 
         return actorsRepository.save(actor);
     }

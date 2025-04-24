@@ -13,6 +13,8 @@ public interface IRoleService {
 
     Optional<Role> getRoleById(String id);
 
+    Optional<Role> getRoleByName(String name);
+
     Optional<Role> updateRole(String id, Role roleDetails);
 
     void deleteRole(String id);
