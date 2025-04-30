@@ -43,12 +43,7 @@ public class RoleService implements IRoleService {
             throw new IllegalArgumentException("El nombre del rol no puede estar vacío.");
         }
 
-        return Optional.of(roleRepository.findByName(name)
-                .orElseGet(() -> {
-                    Role newRole = new Role();
-                    newRole.setName(name);
-                    return roleRepository.save(newRole);
-                }));
+        return roleRepository.findByName(name);
     }
 
     @Override

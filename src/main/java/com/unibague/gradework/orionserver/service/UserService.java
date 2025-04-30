@@ -35,6 +35,8 @@ public class UserService implements IUserService {
         validationService.validateIdUser(student.getIdUser());
         validationService.validateEmail(student.getEmail());
 
+        if (!student.isStatus()) throw new IllegalArgumentException("Status is not valid");
+
         student.setRole(validationService.validateRole(student.getRole()));
         student.setPassword(passwordEncoder.encode(student.getPassword()));
 
