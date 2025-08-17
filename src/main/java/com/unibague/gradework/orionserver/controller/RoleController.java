@@ -55,17 +55,16 @@ public class RoleController {
     @GetMapping("/{id}")
     public ResponseEntity<Role> getRoleById(@PathVariable String id) {
         return roleService.getRoleById(id)
-                .map(role -> new ResponseEntity<>(role, HttpStatus.OK))
-                .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
+                .map(ResponseEntity::ok)
+                .orElseThrow(() -> new IllegalArgumentException("Role not found with ID: " + id));
     }
 
     @GetMapping("/name/{name}")
     public ResponseEntity<Role> getRoleByName(@PathVariable String name) {
         return roleService.getRoleByName(name)
-                .map(role -> new ResponseEntity<>(role, HttpStatus.OK))
-                .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
+                .map(ResponseEntity::ok)
+                .orElseThrow(() -> new IllegalArgumentException("Role not found with name: " + name));
     }
-
     /**
      * Updates an existing role by its ID.
      *
@@ -76,9 +75,9 @@ public class RoleController {
      */
     @PutMapping("/{id}")
     public ResponseEntity<Role> updateRole(@PathVariable String id, @RequestBody Role roleDetails) {
-        return roleService.updateRole(id, roleDetails)
-                .map(updatedRole -> new ResponseEntity<>(updatedRole, HttpStatus.OK))
-                .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
+        Role updated = roleService.updateRole(id, roleDetails)
+                .orElseThrow(() -> new IllegalArgumentException("Role not found with ID: " + id));
+        return ResponseEntity.ok(updated);
     }
 
     /**
