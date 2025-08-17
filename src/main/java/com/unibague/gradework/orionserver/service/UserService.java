@@ -223,7 +223,8 @@ public class UserService implements IUserService {
     @Override
     public Student updateStudent(String id, Student studentDetails) {
         var existing = studentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Student not found."));
+                .orElseThrow(() -> new IllegalArgumentException("Student not found with ID: " + id));
+
         validationService.validateEmailOnUpdate(existing.getEmail(), studentDetails.getEmail());
 
         existing.setIdUser(studentDetails.getIdUser());
@@ -247,7 +248,7 @@ public class UserService implements IUserService {
     @Override
     public Actor updateActor(String id, Actor actorDetails) {
         var existing = actorsRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Actor not found."));
+                .orElseThrow(() -> new IllegalArgumentException("Actor not found with ID: " + id));
         validationService.validateEmailOnUpdate(existing.getEmail(), actorDetails.getEmail());
 
         existing.setIdUser(actorDetails.getIdUser());
@@ -269,14 +270,14 @@ public class UserService implements IUserService {
     @Override
     public void deleteStudent(String id) {
         Student existing = studentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Student not found."));
+                .orElseThrow(() -> new IllegalArgumentException("Student not found with ID: " + id));
         studentRepository.delete(existing);
     }
 
     @Override
     public void deleteActor(String id) {
         Actor existing = actorsRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Actor not found."));
+                .orElseThrow(() -> new IllegalArgumentException("Actor not found with ID: " + id));
         actorsRepository.delete(existing);
     }
 }
