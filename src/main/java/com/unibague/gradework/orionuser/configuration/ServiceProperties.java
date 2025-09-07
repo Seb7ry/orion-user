@@ -53,14 +53,13 @@ public class ServiceProperties {
     private int cacheMaxSize = 100;
 
     /**
-     * Validation configuration
+     * Email validation configuration
      */
     private boolean strictEmailValidation = true;
     private String emailDomain = "@unibague.edu.co";
 
     /**
-     * Security configuration
+     * Password policy configuration
      */
     private int passwordMinLength = 8;
-    private boolean requireStrongPassword = true;
 }
