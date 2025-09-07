@@ -7,15 +7,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Map;
 
 /**
- * The RoleController class handles HTTP requests related to roles.
- * It acts as a REST controller, providing endpoints to create, retrieve, update, and delete roles.
- *
- * Annotations:
- * - @RestController: Marks this class as a RESTful controller.
- * - @RequestMapping: Specifies the base path for all endpoints in this controller.
+ * The RoleController class handles HTTP requests related to roles and permissions.
+ * It acts as a REST controller, providing endpoints to create, retrieve, update, and delete roles,
+ * as well as manage permissions for each role.
  */
 @RestController
 @RequestMapping("/service/role")
@@ -24,6 +23,10 @@ public class RoleController {
     @Autowired
     private IRoleService roleService;
 
+    // ==========================================
+    // BASIC CRUD OPERATIONS
+    // ==========================================
+
     /**
      * Creates a new role.
      *
@@ -31,7 +34,7 @@ public class RoleController {
      * @return a ResponseEntity containing the created Role object and HTTP status 201 (Created).
      */
     @PostMapping
-    public ResponseEntity<Role> createRole(@RequestBody Role role) {
+    public ResponseEntity<Role> createRole(@Valid @RequestBody Role role) {
         return new ResponseEntity<>(roleService.createRole(role), HttpStatus.CREATED);
     }
 
@@ -59,12 +62,20 @@ public class RoleController {
                 .orElseThrow(() -> new IllegalArgumentException("Role not found with ID: " + id));
     }
 
+    /**
+     * Retrieves a role by its name.
+     *
+     * @param name the name of the role.
+     * @return a ResponseEntity containing the Role object and HTTP status 200 (OK) if found,
+     *         or HTTP status 404 (Not Found) if the role does not exist.
+     */
     @GetMapping("/name/{name}")
     public ResponseEntity<Role> getRoleByName(@PathVariable String name) {
         return roleService.getRoleByName(name)
                 .map(ResponseEntity::ok)
                 .orElseThrow(() -> new IllegalArgumentException("Role not found with name: " + name));
     }
+
     /**
      * Updates an existing role by its ID.
      *
@@ -74,7 +85,7 @@ public class RoleController {
      *         or HTTP status 404 (Not Found) if the role does not exist.
      */
     @PutMapping("/{id}")
-    public ResponseEntity<Role> updateRole(@PathVariable String id, @RequestBody Role roleDetails) {
+    public ResponseEntity<Role> updateRole(@PathVariable String id, @Valid @RequestBody Role roleDetails) {
         Role updated = roleService.updateRole(id, roleDetails)
                 .orElseThrow(() -> new IllegalArgumentException("Role not found with ID: " + id));
         return ResponseEntity.ok(updated);
@@ -90,5 +101,54 @@ public class RoleController {
     public ResponseEntity<Void> deleteRole(@PathVariable String id) {
         roleService.deleteRole(id);
         return ResponseEntity.noContent().build();
+    }
+
+    // ==========================================
+    // PERMISSION MANAGEMENT ENDPOINTS
+    // ==========================================
+
+    /**
+     * Gets all permissions for a specific role.
+     *
+     * @param roleId the unique identifier of the role.
+     * @return a ResponseEntity containing the list of permissions and HTTP status 200 (OK).
+     */
+    @GetMapping("/{roleId}/permissions")
+    public ResponseEntity<List<String>> getRolePermissions(@PathVariable String roleId) {
+        List<String> permissions = roleService.getRolePermissions(roleId);
+        return ResponseEntity.ok(permissions);
+    }
+
+    /**
+     * Adds a permission to a role.
+     *
+     * @param roleId the unique identifier of the role.
+     * @param request the request body containing the permission to add.
+     * @return a ResponseEntity containing the updated Role object and HTTP status 200 (OK).
+     */
+    @PostMapping("/{roleId}/permissions")
+    public ResponseEntity<Role> addPermissionToRole(@PathVariable String roleId,
+                                                    @RequestBody Map<String, String> request) {
+        String permission = request.get("permission");
+        if (permission == null || permission.isBlank()) {
+            throw new IllegalArgumentException("Permission is required");
+        }
+
+        Role updatedRole = roleService.addPermissionToRole(roleId, permission);
+        return ResponseEntity.ok(updatedRole);
+    }
+
+    /**
+     * Removes a permission from a role.
+     *
+     * @param roleId the unique identifier of the role.
+     * @param permission the permission to remove.
+     * @return a ResponseEntity containing the updated Role object and HTTP status 200 (OK).
+     */
+    @DeleteMapping("/{roleId}/permissions/{permission}")
+    public ResponseEntity<Role> removePermissionFromRole(@PathVariable String roleId,
+                                                         @PathVariable String permission) {
+        Role updatedRole = roleService.removePermissionFromRole(roleId, permission);
+        return ResponseEntity.ok(updatedRole);
     }
 }
