@@ -9,10 +9,6 @@ import com.unibague.gradework.orionuser.repository.StudentRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-/**
- * Service for validating user-related data
- * Provides centralized validation logic with specific exceptions
- */
 @Slf4j
 @Service
 public class ValidationService implements IValidationService {
@@ -34,94 +30,140 @@ public class ValidationService implements IValidationService {
 
     @Override
     public Role validateRole(Role role) {
+        log.debug("Validating role: {}", role != null ? role.getIdRole() : "null");
+
         if (role == null || role.getIdRole() == null || role.getIdRole().trim().isEmpty()) {
             throw new UserExceptions.InvalidUserDataException("Role ID is required");
         }
 
-        return roleRepository.findById(role.getIdRole())
+        Role validatedRole = roleRepository.findById(role.getIdRole())
                 .orElseThrow(() -> new UserExceptions.RoleNotFoundException(role.getIdRole()));
+
+        log.debug("Role validation successful: {}", validatedRole.getName());
+        return validatedRole;
     }
 
     @Override
     public void validateEmail(String email) {
+        log.debug("Validating email: {}", email);
+
         if (email == null || email.trim().isEmpty()) {
             throw new UserExceptions.InvalidUserDataException("Email is required");
         }
 
-        // Validate email domain if strict validation is enabled
+        String cleanEmail = email.trim().toLowerCase();
+
+        // Domain validation if strict validation is enabled
         if (serviceProperties.isStrictEmailValidation()) {
             String expectedDomain = serviceProperties.getEmailDomain();
-            if (!email.toLowerCase().endsWith(expectedDomain.toLowerCase())) {
-                throw new UserExceptions.InvalidEmailException(email, expectedDomain);
+            if (!cleanEmail.endsWith(expectedDomain.toLowerCase())) {
+                throw new UserExceptions.InvalidEmailException(cleanEmail, expectedDomain);
             }
         }
 
         // Check for duplicates
-        boolean emailExists = studentRepository.existsByEmail(email) || actorRepository.existsByEmail(email);
+        boolean emailExists = studentRepository.existsByEmail(cleanEmail) ||
+                actorRepository.existsByEmail(cleanEmail);
         if (emailExists) {
-            throw new UserExceptions.DuplicateUserException(email);
+            throw new UserExceptions.DuplicateUserException(cleanEmail);
         }
+
+        log.debug("Email validation successful: {}", cleanEmail);
     }
 
     @Override
     public void validateEmailOnUpdate(String existingEmail, String newEmail) {
-        if (!existingEmail.equals(newEmail)) {
-            // Validate domain if strict validation is enabled
-            if (serviceProperties.isStrictEmailValidation()) {
-                String expectedDomain = serviceProperties.getEmailDomain();
-                if (!newEmail.toLowerCase().endsWith(expectedDomain.toLowerCase())) {
-                    throw new UserExceptions.InvalidEmailException(newEmail, expectedDomain);
-                }
-            }
+        log.debug("Validating email update: {} -> {}", existingEmail, newEmail);
 
-            // Check for duplicates
-            boolean exists = studentRepository.existsByEmail(newEmail) || actorRepository.existsByEmail(newEmail);
-            if (exists) {
-                throw new UserExceptions.DuplicateUserException("email", newEmail);
+        if (newEmail == null || newEmail.trim().isEmpty()) {
+            throw new UserExceptions.InvalidUserDataException("Email is required");
+        }
+
+        String cleanExistingEmail = existingEmail.trim().toLowerCase();
+        String cleanNewEmail = newEmail.trim().toLowerCase();
+
+        // If email hasn't changed, no validation needed
+        if (cleanExistingEmail.equals(cleanNewEmail)) {
+            return;
+        }
+
+        // Domain validation if strict validation is enabled
+        if (serviceProperties.isStrictEmailValidation()) {
+            String expectedDomain = serviceProperties.getEmailDomain();
+            if (!cleanNewEmail.endsWith(expectedDomain.toLowerCase())) {
+                throw new UserExceptions.InvalidEmailException(cleanNewEmail, expectedDomain);
             }
         }
+
+        // Check uniqueness (excluding current user)
+        boolean exists = studentRepository.existsByEmail(cleanNewEmail) ||
+                actorRepository.existsByEmail(cleanNewEmail);
+        if (exists) {
+            throw new UserExceptions.DuplicateUserException("email", cleanNewEmail);
+        }
+
+        log.debug("Email update validation successful: {}", cleanNewEmail);
     }
 
     @Override
     public void validateIdUser(String idUser) {
+        log.debug("Validating user ID: {}", idUser);
+
         if (idUser == null || idUser.trim().isEmpty()) {
             throw new UserExceptions.InvalidUserDataException("User ID is required");
         }
 
-        boolean idExists = studentRepository.existsById(idUser) || actorRepository.existsById(idUser);
+        String cleanId = idUser.trim();
+
+        boolean idExists = studentRepository.existsById(cleanId) ||
+                actorRepository.existsById(cleanId);
         if (idExists) {
-            throw new UserExceptions.DuplicateUserException("ID", idUser);
+            throw new UserExceptions.DuplicateUserException("ID", cleanId);
         }
+
+        log.debug("User ID validation successful: {}", cleanId);
     }
 
     @Override
     public void validatePassword(String password) {
+        log.debug("Validating password (length: {})", password != null ? password.length() : 0);
+
         if (password == null || password.trim().isEmpty()) {
             throw new UserExceptions.InvalidPasswordException("Password is required");
         }
 
-        if (password.length() < serviceProperties.getPasswordMinLength()) {
+        String cleanPassword = password.trim();
+        int minLength = serviceProperties.getPasswordMinLength();
+
+        if (cleanPassword.length() < minLength) {
             throw new UserExceptions.InvalidPasswordException(
-                    "Password must be at least " + serviceProperties.getPasswordMinLength() + " characters long"
-            );
+                    "Password must be at least " + minLength + " characters long");
         }
+
+        log.debug("Password validation successful");
     }
 
     @Override
     public void validateStudentId(String studentId) {
+        log.debug("Validating student ID: {}", studentId);
+
         if (studentId == null || studentId.trim().isEmpty()) {
             throw new UserExceptions.InvalidUserDataException("Student ID is required");
         }
 
-        if (!studentId.matches("^[0-9]{8,12}$")) {
+        String cleanStudentId = studentId.trim();
+
+        if (!cleanStudentId.matches("^[0-9]{8,12}$")) {
             throw new UserExceptions.InvalidUserDataException("Student ID must be 8-12 digits");
         }
 
         boolean exists = studentRepository.findAll().stream()
-                .anyMatch(student -> studentId.equals(student.getStudentID()));
+                .anyMatch(student -> cleanStudentId.equals(student.getStudentID()));
 
         if (exists) {
-            throw new UserExceptions.DuplicateStudentException(studentId);
+            throw new UserExceptions.DuplicateStudentException(cleanStudentId);
         }
+
+        log.debug("Student ID validation successful: {}", cleanStudentId);
     }
 }

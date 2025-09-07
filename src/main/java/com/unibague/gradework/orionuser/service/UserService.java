@@ -1,7 +1,9 @@
 package com.unibague.gradework.orionuser.service;
 
+import com.unibague.gradework.orionuser.exception.UserExceptions;
 import com.unibague.gradework.orionuser.model.*;
 import com.unibague.gradework.orionuser.repository.*;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -9,33 +11,38 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class UserService implements IUserService {
 
     private final IProgramService programService;
     private final StudentRepository studentRepository;
-    private final ActorRepository actorsRepository;
+    private final ActorRepository actorRepository;
     private final PasswordEncoder passwordEncoder;
     private final IValidationService validationService;
 
     public UserService(IProgramService programService,
                        StudentRepository studentRepository,
-                       ActorRepository actorsRepository,
+                       ActorRepository actorRepository,
                        PasswordEncoder passwordEncoder,
                        IValidationService validationService) {
         this.programService = programService;
         this.studentRepository = studentRepository;
-        this.actorsRepository = actorsRepository;
+        this.actorRepository = actorRepository;
         this.passwordEncoder = passwordEncoder;
         this.validationService = validationService;
     }
 
     @Override
     public Student createStudent(Student student) {
+        log.info("Creating new student: {}", student.getEmail());
+
         validationService.validateIdUser(student.getIdUser());
         validationService.validateEmail(student.getEmail());
 
-        if (!student.isStatus()) throw new IllegalArgumentException("Status is not valid");
+        if (!student.isStatus()) {
+            throw new UserExceptions.InvalidUserDataException("Status is not valid");
+        }
 
         student.setRole(validationService.validateRole(student.getRole()));
         student.setPassword(passwordEncoder.encode(student.getPassword()));
@@ -46,11 +53,15 @@ public class UserService implements IUserService {
             student.setPrograms(List.of());
         }
 
-        return studentRepository.save(student);
+        Student saved = studentRepository.save(student);
+        log.info("Student created successfully with ID: {}", saved.getIdUser());
+        return saved;
     }
 
     @Override
     public Actor createActor(Actor actor) {
+        log.info("Creating new actor: {}", actor.getEmail());
+
         validationService.validateIdUser(actor.getIdUser());
         validationService.validateEmail(actor.getEmail());
 
@@ -63,15 +74,19 @@ public class UserService implements IUserService {
             actor.setPrograms(List.of());
         }
 
-        return actorsRepository.save(actor);
+        Actor saved = actorRepository.save(actor);
+        log.info("Actor created successfully with ID: {}", saved.getIdUser());
+        return saved;
     }
 
     @Override
     public List<StudentDTO> getAllStudentsDTO() {
-        return studentRepository.findAll().stream().map(student -> {
+        log.debug("Retrieving all students as DTOs");
+        List<Student> students = studentRepository.findAll();
+
+        return students.stream().map(student -> {
             List<ProgramDTO> programs = programService.getProgramById(
-                    Optional.ofNullable(student.getPrograms())
-                            .orElse(List.of())
+                    Optional.ofNullable(student.getPrograms()).orElse(List.of())
             );
             return StudentDTO.builder()
                     .idUser(student.getIdUser())
@@ -91,10 +106,12 @@ public class UserService implements IUserService {
 
     @Override
     public List<ActorDTO> getAllActorsDTO() {
-        return actorsRepository.findAll().stream().map(actor -> {
+        log.debug("Retrieving all actors as DTOs");
+        List<Actor> actors = actorRepository.findAll();
+
+        return actors.stream().map(actor -> {
             List<ProgramDTO> programs = programService.getProgramById(
-                    Optional.ofNullable(actor.getPrograms())
-                            .orElse(List.of())
+                    Optional.ofNullable(actor.getPrograms()).orElse(List.of())
             );
 
             return ActorDTO.builder()
@@ -113,10 +130,10 @@ public class UserService implements IUserService {
 
     @Override
     public Optional<StudentDTO> getStudentDTOById(String id) {
+        log.debug("Retrieving student DTO by ID: {}", id);
         return studentRepository.findById(id).map(student -> {
             List<ProgramDTO> programs = programService.getProgramById(
-                    Optional.ofNullable(student.getPrograms())
-                            .orElse(List.of())
+                    Optional.ofNullable(student.getPrograms()).orElse(List.of())
             );
 
             return StudentDTO.builder()
@@ -137,10 +154,10 @@ public class UserService implements IUserService {
 
     @Override
     public Optional<ActorDTO> getActorDTOById(String id) {
-        return actorsRepository.findById(id).map(actor -> {
+        log.debug("Retrieving actor DTO by ID: {}", id);
+        return actorRepository.findById(id).map(actor -> {
             List<ProgramDTO> programs = programService.getProgramById(
-                    Optional.ofNullable(actor.getPrograms())
-                            .orElse(List.of())
+                    Optional.ofNullable(actor.getPrograms()).orElse(List.of())
             );
 
             return ActorDTO.builder()
@@ -164,11 +181,13 @@ public class UserService implements IUserService {
 
     @Override
     public Optional<Actor> getActorById(String id) {
-        return actorsRepository.findById(id);
+        return actorRepository.findById(id);
     }
 
     @Override
     public Optional<UserLogDTO> findUserByEmail(String email) {
+        log.debug("Finding user by email: {}", email);
+
         Optional<Student> studentOpt = studentRepository.findByEmail(email);
         if (studentOpt.isPresent()) {
             Student student = studentOpt.get();
@@ -194,7 +213,7 @@ public class UserService implements IUserService {
             return Optional.of(result);
         }
 
-        Optional<Actor> actorOpt = actorsRepository.findByEmail(email);
+        Optional<Actor> actorOpt = actorRepository.findByEmail(email);
         if (actorOpt.isPresent()) {
             Actor actor = actorOpt.get();
             List<ProgramDTO> programDetails = programService.getProgramById(
@@ -222,8 +241,10 @@ public class UserService implements IUserService {
 
     @Override
     public Student updateStudent(String id, Student studentDetails) {
-        var existing = studentRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Student not found with ID: " + id));
+        log.info("Updating student with ID: {}", id);
+
+        Student existing = studentRepository.findById(id)
+                .orElseThrow(() -> new UserExceptions.StudentNotFoundException(id));
 
         validationService.validateEmailOnUpdate(existing.getEmail(), studentDetails.getEmail());
 
@@ -242,13 +263,18 @@ public class UserService implements IUserService {
             existing.setPassword(passwordEncoder.encode(studentDetails.getPassword()));
         }
 
-        return studentRepository.save(existing);
+        Student saved = studentRepository.save(existing);
+        log.info("Student updated successfully: {}", id);
+        return saved;
     }
 
     @Override
     public Actor updateActor(String id, Actor actorDetails) {
-        var existing = actorsRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Actor not found with ID: " + id));
+        log.info("Updating actor with ID: {}", id);
+
+        Actor existing = actorRepository.findById(id)
+                .orElseThrow(() -> new UserExceptions.ActorNotFoundException(id));
+
         validationService.validateEmailOnUpdate(existing.getEmail(), actorDetails.getEmail());
 
         existing.setIdUser(actorDetails.getIdUser());
@@ -264,20 +290,24 @@ public class UserService implements IUserService {
             existing.setPassword(passwordEncoder.encode(actorDetails.getPassword()));
         }
 
-        return actorsRepository.save(existing);
+        Actor saved = actorRepository.save(existing);
+        log.info("Actor updated successfully: {}", id);
+        return saved;
     }
 
     @Override
     public void deleteStudent(String id) {
+        log.info("Deleting student with ID: {}", id);
         Student existing = studentRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Student not found with ID: " + id));
+                .orElseThrow(() -> new UserExceptions.StudentNotFoundException(id));
         studentRepository.delete(existing);
     }
 
     @Override
     public void deleteActor(String id) {
-        Actor existing = actorsRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Actor not found with ID: " + id));
-        actorsRepository.delete(existing);
+        log.info("Deleting actor with ID: {}", id);
+        Actor existing = actorRepository.findById(id)
+                .orElseThrow(() -> new UserExceptions.ActorNotFoundException(id));
+        actorRepository.delete(existing);
     }
 }

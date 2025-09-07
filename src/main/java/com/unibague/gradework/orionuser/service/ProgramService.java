@@ -11,10 +11,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * Service for communicating with Program Service
- * Uses externalized configuration for service URLs and timeouts
- */
 @Slf4j
 @Service
 public class ProgramService implements IProgramService {
@@ -59,7 +55,8 @@ public class ProgramService implements IProgramService {
                 String name = (String) programMap.get("programName");
 
                 if (id == null || name == null) {
-                    throw new IllegalArgumentException("Retrieved program does not contain valid data");
+                    log.warn("Invalid program data received for ID: {}", programId);
+                    return null;
                 }
 
                 log.debug("Successfully retrieved program: {}", name);
@@ -72,12 +69,8 @@ public class ProgramService implements IProgramService {
         } catch (HttpClientErrorException.NotFound e) {
             log.debug("Program not found with ID: {}", programId);
             return null;
-        } catch (HttpClientErrorException e) {
-            log.error("HTTP error while fetching program {}: {} - {}",
-                    programId, e.getStatusCode(), e.getMessage());
-            return null;
         } catch (Exception e) {
-            log.error("Error fetching program with ID {}: {}", programId, e.getMessage(), e);
+            log.error("Error fetching program with ID {}: {}", programId, e.getMessage());
             return null;
         }
     }
