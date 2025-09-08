@@ -35,10 +35,14 @@ public class UserService implements IUserService {
 
     @Override
     public Student createStudent(Student student) {
-        log.info("Creating new student: {}", student.getEmail());
+        log.info("Creating student - ID: {}, Email: {}, Programs: {}",
+                student.getIdUser(), student.getEmail(),
+                student.getPrograms() != null ? student.getPrograms().size() : 0);
 
         validationService.validateIdUser(student.getIdUser());
         validationService.validateEmail(student.getEmail());
+        validationService.validatePassword(student.getPassword());
+        validationService.validateStudentId(student.getStudentID());
 
         if (!student.isStatus()) {
             throw new UserExceptions.InvalidUserDataException("Status is not valid");
@@ -60,10 +64,13 @@ public class UserService implements IUserService {
 
     @Override
     public Actor createActor(Actor actor) {
-        log.info("Creating new actor: {}", actor.getEmail());
+        log.info("Creating actor - ID: {}, Email: {}, Position: {}, Programs: {}",
+                actor.getIdUser(), actor.getEmail(), actor.getPosition(),
+                actor.getPrograms() != null ? actor.getPrograms().size() : 0);
 
         validationService.validateIdUser(actor.getIdUser());
         validationService.validateEmail(actor.getEmail());
+        validationService.validatePassword(actor.getPassword());
 
         actor.setRole(validationService.validateRole(actor.getRole()));
         actor.setPassword(passwordEncoder.encode(actor.getPassword()));
@@ -247,6 +254,9 @@ public class UserService implements IUserService {
                 .orElseThrow(() -> new UserExceptions.StudentNotFoundException(id));
 
         validationService.validateEmailOnUpdate(existing.getEmail(), studentDetails.getEmail());
+        if (studentDetails.getRole() != null) {
+            existing.setRole(validationService.validateRole(studentDetails.getRole()));
+        }
 
         existing.setIdUser(studentDetails.getIdUser());
         existing.setName(studentDetails.getName());
@@ -276,6 +286,9 @@ public class UserService implements IUserService {
                 .orElseThrow(() -> new UserExceptions.ActorNotFoundException(id));
 
         validationService.validateEmailOnUpdate(existing.getEmail(), actorDetails.getEmail());
+        if (actorDetails.getRole() != null) {
+            existing.setRole(validationService.validateRole(actorDetails.getRole()));
+        }
 
         existing.setIdUser(actorDetails.getIdUser());
         existing.setName(actorDetails.getName());
