@@ -1,4 +1,4 @@
-package com.unibague.gradework.orionuser.security;
+package com.unibague.gradework.orionuser.security; // Cambiar package según el servicio
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
@@ -15,7 +15,7 @@ import java.io.IOException;
 
 /**
  * Security filter to ensure requests come through the API Gateway
- * Blocks direct access to microservice endpoints
+ * Blocks direct access to microservice endpoints but allows inter-service communication
  */
 @Slf4j
 @Component
@@ -24,11 +24,23 @@ public class GatewaySecurityFilter implements Filter {
 
     private static final String GATEWAY_HEADER = "X-Gateway-Validated";
     private static final String EXPECTED_VALUE = "true";
+    private static final String SERVICE_HEADER = "X-Service-Request";
+    private static final String INTERNAL_REQUEST_HEADER = "X-Internal-Request";
 
     // Public endpoints that don't require gateway validation
     private static final String[] PUBLIC_PATHS = {
             "/actuator/health",
             "/health"
+    };
+
+    // Internal service endpoints that allow direct inter-service communication
+    private static final String[] INTERNAL_SERVICE_PATHS = {
+            "/service/user/auth/email/",  // Para validación de email desde auth service
+            "/service/role/name/",        // Para búsqueda de roles por name
+            "/service/user/student/auth/", // Para auth endpoints
+            "/service/user/actor/auth/",   // Para auth endpoints
+            "/service/program/name/",      // Para búsqueda de programas por name
+            "/service/program/"            // Para operaciones de programa
     };
 
     @Override
@@ -40,6 +52,7 @@ public class GatewaySecurityFilter implements Filter {
 
         String requestPath = httpRequest.getRequestURI();
         String method = httpRequest.getMethod();
+        String userAgent = httpRequest.getHeader("User-Agent");
 
         // Allow public endpoints
         if (isPublicEndpoint(requestPath)) {
@@ -48,12 +61,37 @@ public class GatewaySecurityFilter implements Filter {
             return;
         }
 
-        // Check for gateway header
+        // Allow internal service communication
+        if (isInternalServiceEndpoint(requestPath)) {
+            log.debug("Allowing internal service communication: {} {}", method, requestPath);
+            // Add service communication header for tracking
+            httpRequest.setAttribute("X-Internal-Service-Request", "true");
+            chain.doFilter(request, response);
+            return;
+        }
+
+        // Check if it's a request from Gateway with X-Internal-Request header
+        String internalRequest = httpRequest.getHeader(INTERNAL_REQUEST_HEADER);
+        if ("true".equals(internalRequest)) {
+            log.debug("Allowing gateway internal request: {} {} from gateway", method, requestPath);
+            chain.doFilter(request, response);
+            return;
+        }
+
+        // Check if it's a direct service-to-service call (Java HTTP client)
+        if (isServiceToServiceCall(httpRequest)) {
+            log.debug("Allowing service-to-service communication: {} {} from {}",
+                    method, requestPath, userAgent);
+            chain.doFilter(request, response);
+            return;
+        }
+
+        // Check for gateway header for regular API calls
         String gatewayHeader = httpRequest.getHeader(GATEWAY_HEADER);
 
         if (!EXPECTED_VALUE.equals(gatewayHeader)) {
-            log.warn("BLOCKED: Direct access attempt to {} {} - Missing or invalid gateway header: {}",
-                    method, requestPath, gatewayHeader);
+            log.warn("BLOCKED: Direct access attempt to {} {} - Missing or invalid gateway header: {} - User-Agent: {}",
+                    method, requestPath, gatewayHeader, userAgent);
 
             sendUnauthorizedResponse(httpResponse, requestPath);
             return;
@@ -85,6 +123,47 @@ public class GatewaySecurityFilter implements Filter {
     }
 
     /**
+     * Check if endpoint is an internal service endpoint that allows direct communication
+     */
+    private boolean isInternalServiceEndpoint(String path) {
+        for (String internalPath : INTERNAL_SERVICE_PATHS) {
+            if (path.startsWith(internalPath)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if the request is coming from another service (not a browser/client)
+     */
+    private boolean isServiceToServiceCall(HttpServletRequest request) {
+        String userAgent = request.getHeader("User-Agent");
+        String contentType = request.getHeader("Content-Type");
+
+        // Check for typical service-to-service indicators
+        if (userAgent != null) {
+            userAgent = userAgent.toLowerCase();
+            // Java HTTP clients, RestTemplate, etc.
+            if (userAgent.contains("java") ||
+                    userAgent.contains("apache-httpclient") ||
+                    userAgent.contains("okhttp") ||
+                    userAgent.startsWith("java/") ||
+                    userAgent.contains("orion-auth-service")) {
+                return true;
+            }
+        }
+
+        // Check for service-specific headers
+        String serviceHeader = request.getHeader(SERVICE_HEADER);
+        if ("true".equals(serviceHeader)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Send unauthorized response for blocked requests
      */
     private void sendUnauthorizedResponse(HttpServletResponse response, String path) throws IOException {
@@ -99,7 +178,8 @@ public class GatewaySecurityFilter implements Filter {
                         "\"path\":\"%s\"," +
                         "\"timestamp\":\"%s\"," +
                         "\"status\":403," +
-                        "\"service\":\"orion-user\"" +
+                        "\"service\":\"orion-user\"," +  // Cambiar según el servicio
+                        "\"suggestion\":\"Use /api/users/ endpoints through the gateway\"" +
                         "}",
                 path,
                 java.time.LocalDateTime.now()

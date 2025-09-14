@@ -384,31 +384,52 @@ public class UserController {
     @GetMapping("/auth/email/{email}")
     public ResponseEntity<?> getUserByEmail(@PathVariable String email) {
         try {
-            UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
+            // Check if request comes from authenticated user context (Gateway)
+            Optional<UserContext.AuthenticatedUser> currentUserOpt = UserContext.getCurrentUser();
 
-            // Only allow access to own email or admin access
-            if (!currentUser.isAdmin() && !currentUser.getUserId().equals(email)) {
-                log.warn("Unauthorized email access attempt: {} requested by {}",
-                        email, currentUser.getUserId());
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of(
-                                "error", "ACCESS_DENIED",
-                                "message", "You can only access your own user information"
-                        ));
+            if (currentUserOpt.isPresent()) {
+                // User is authenticated through Gateway - apply normal security
+                UserContext.AuthenticatedUser currentUser = currentUserOpt.get();
+
+                // Only allow access to own email or admin access
+                if (!currentUser.isAdmin() && !currentUser.getUserId().equals(email)) {
+                    log.warn("Unauthorized email access attempt: {} requested by {}",
+                            email, currentUser.getUserId());
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(Map.of(
+                                    "error", "ACCESS_DENIED",
+                                    "message", "You can only access your own user information"
+                            ));
+                }
+
+                log.debug("Authenticated user {} requesting email: {}", currentUser.getUserId(), email);
+            } else {
+                // No authenticated user context - this is likely internal auth service call
+                log.debug("Internal auth service request for email: {}", email);
+
+                // For internal authentication service calls, allow direct access
+                return userService.findUserByEmail(email)
+                        .map(user -> {
+                            log.debug("User found for internal auth request: {}", user.getIdUser());
+                            return ResponseEntity.ok(user);
+                        })
+                        .orElseThrow(() -> new IllegalArgumentException("User not found with email: " + email));
             }
 
-            log.debug("User by email {} requested by: {}", email, currentUser.getUserId());
+            // Normal authenticated flow
+            log.debug("User by email {} requested by authenticated user", email);
 
             return userService.findUserByEmail(email)
                     .map(ResponseEntity::ok)
                     .orElseThrow(() -> new IllegalArgumentException("User not found with email: " + email));
 
-        } catch (SecurityException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "AUTHENTICATION_REQUIRED", "message", e.getMessage()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", "NOT_FOUND", "message", e.getMessage()));
+        } catch (Exception e) {
+            log.error("Unexpected error in getUserByEmail: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "INTERNAL_ERROR", "message", "An unexpected error occurred"));
         }
     }
 
