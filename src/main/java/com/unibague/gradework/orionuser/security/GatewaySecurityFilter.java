@@ -1,4 +1,4 @@
-package com.unibague.gradework.orionuser.security; // Cambiar package según el servicio
+package com.unibague.gradework.orionuser.security;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
@@ -39,8 +39,9 @@ public class GatewaySecurityFilter implements Filter {
             "/service/role/name/",        // Para búsqueda de roles por name
             "/service/user/student/auth/", // Para auth endpoints
             "/service/user/actor/auth/",   // Para auth endpoints
-            "/service/program/name/",      // Para búsqueda de programas por name
-            "/service/program/"            // Para operaciones de programa
+            // REMOVED: Program paths que no pertenecen a este servicio
+            // "/service/program/name/",   // ❌ INCORRECTO - esto es para program service
+            // "/service/program/"         // ❌ INCORRECTO - esto es para program service
     };
 
     @Override
@@ -178,7 +179,7 @@ public class GatewaySecurityFilter implements Filter {
                         "\"path\":\"%s\"," +
                         "\"timestamp\":\"%s\"," +
                         "\"status\":403," +
-                        "\"service\":\"orion-user\"," +  // Cambiar según el servicio
+                        "\"service\":\"orion-user\"," +
                         "\"suggestion\":\"Use /api/users/ endpoints through the gateway\"" +
                         "}",
                 path,
