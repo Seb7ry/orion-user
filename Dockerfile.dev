@@ -1,0 +1,28 @@
+FROM eclipse-temurin:21-jdk
+
+# utilidades mínimas
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# usuario app
+RUN useradd -ms /bin/bash orion
+USER orion
+
+WORKDIR /app
+
+# copia wrapper + pom primero (para cache)
+COPY --chown=orion:orion mvnw mvnw.cmd pom.xml ./
+COPY --chown=orion:orion .mvn .mvn
+
+# FIX CRLF -> LF y permisos, luego predescarga deps
+RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && ./mvnw -B -q dependency:go-offline
+
+# puertos dev
+EXPOSE 8092 5005
+ENV SPRING_PROFILES_ACTIVE=docker
+
+# healthcheck para cuando esté corriendo
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
+  CMD curl -fsS http://localhost:8092/actuator/health || exit 1
+
+# Hot reload + debug (ojo a cómo va pasado el -D, sin comillas internas)
+CMD ["./mvnw", "spring-boot:run", "-Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"]

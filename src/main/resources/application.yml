@@ -1,10 +1,9 @@
 # ===========================================
-# ORION USER SERVICE - Simplified Configuration
-# Uses centralized environment variables from .env files
+# ORION USER SERVICE - application.yml (dev/docker)
 # ===========================================
 
 server:
-  port: ${SERVER_PORT:8092}
+  port: ${USER_SERVICE_PORT:8092}
 
 spring:
   application:
@@ -34,78 +33,38 @@ orion:
     failure-rate-threshold: ${SERVICE_FAILURE_RATE:50.0}
     minimum-number-of-calls: ${SERVICE_MIN_CALLS:5}
     wait-duration-in-open-state: ${SERVICE_CIRCUIT_WAIT:30s}
-    cache-enabled: ${SERVICE_CACHE_ENABLED:false}
-    cache-ttl: ${SERVICE_CACHE_TTL:5m}
-    cache-max-size: ${SERVICE_CACHE_MAX_SIZE:100}
-    strict-email-validation: ${USER_STRICT_EMAIL_VALIDATION:true}
-    email-domain: ${USER_EMAIL_DOMAIN:@unibague.edu.co}
-    password-min-length: ${USER_PASSWORD_MIN_LENGTH:8}
+    strict-email-validation: ${USER_STRICT_EMAIL_VALIDATION:false}
+    password-min-length: ${USER_PASSWORD_MIN_LENGTH:4}
     require-strong-password: ${USER_REQUIRE_STRONG_PASSWORD:true}
-
-# Management & Monitoring
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,env
-      base-path: /actuator
-  endpoint:
-    health:
-      show-details: always
-  prometheus:
-    metrics:
-      export:
-        enabled: true
-
-# Application Info - Uses centralized variables
-info:
-  app:
-    name: ${SERVICE_NAME:Orion User Service}
-    description: User Management and Authentication for Orion Microservices
-    version: 1.0.0
-    features:
-      - User Registration
-      - Role Management
-      - Authentication
-      - Password Management
-      - Program Assignment
 
 # Logging Configuration - Uses centralized variables
 logging:
   level:
-    com.unibague.gradework: ${LOG_LEVEL:INFO}
+    com.unibague.gradework: ${LOG_LEVEL_USER:DEBUG}
     org.springframework.web: ${WEB_LOG_LEVEL:INFO}
-    org.springframework.data.mongodb: ${MONGODB_LOG_LEVEL:INFO}
-    org.springframework.security: ${SECURITY_LOG_LEVEL:INFO}
+    org.springframework.data.mongodb: ${MONGODB_LOG_LEVEL:WARN}
+    org.springframework.security: ${SECURITY_LOG_LEVEL:DEBUG}
     root: ${LOGGING_LEVEL:INFO}
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{traceId}] %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
 ---
 # ===========================================
-# DEVELOPMENT PROFILE - Enhanced debugging
+# DEVELOPMENT PROFILE - Minimal overrides
 # ===========================================
 spring:
   config:
     activate:
       on-profile: dev
 
-# Development-specific settings
+# Development-specific settings (if needed)
 logging:
   level:
     com.unibague.gradework: DEBUG
-    org.springframework.web: DEBUG
-    org.springframework.security: DEBUG
-
-# Development database (if needed)
-# spring:
-#   data:
-#     mongodb:
-#       uri: mongodb://localhost:27017/oriondb_dev
 
 ---
 # ===========================================
-# DOCKER PROFILE - Production ready
+# DOCKER PROFILE - Minimal overrides
 # ===========================================
 spring:
   config:
@@ -117,7 +76,7 @@ spring:
 
 ---
 # ===========================================
-# PRODUCTION PROFILE - Optimized for performance
+# PRODUCTION PROFILE - Minimal overrides
 # ===========================================
 spring:
   config:
@@ -129,11 +88,3 @@ logging:
   level:
     root: WARN
     com.unibague.gradework: INFO
-    org.springframework.security: WARN
-
-# Production optimizations
-orion:
-  services:
-    cache-enabled: true
-    cache-ttl: 10m
-    cache-max-size: 500
