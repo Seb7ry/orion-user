@@ -54,14 +54,6 @@ public class ValidationService implements IValidationService {
 
         String cleanEmail = email.trim().toLowerCase();
 
-        // Domain validation if strict validation is enabled
-        if (serviceProperties.isStrictEmailValidation()) {
-            String expectedDomain = serviceProperties.getEmailDomain();
-            if (!cleanEmail.endsWith(expectedDomain.toLowerCase())) {
-                throw new UserExceptions.InvalidEmailException(cleanEmail, expectedDomain);
-            }
-        }
-
         // Check for duplicates
         boolean emailExists = studentRepository.existsByEmail(cleanEmail) ||
                 actorRepository.existsByEmail(cleanEmail);
@@ -86,14 +78,6 @@ public class ValidationService implements IValidationService {
         // If email hasn't changed, no validation needed
         if (cleanExistingEmail.equals(cleanNewEmail)) {
             return;
-        }
-
-        // Domain validation if strict validation is enabled
-        if (serviceProperties.isStrictEmailValidation()) {
-            String expectedDomain = serviceProperties.getEmailDomain();
-            if (!cleanNewEmail.endsWith(expectedDomain.toLowerCase())) {
-                throw new UserExceptions.InvalidEmailException(cleanNewEmail, expectedDomain);
-            }
         }
 
         // Check uniqueness (excluding current user)
@@ -131,14 +115,6 @@ public class ValidationService implements IValidationService {
 
         if (password == null || password.trim().isEmpty()) {
             throw new UserExceptions.InvalidPasswordException("Password is required");
-        }
-
-        String cleanPassword = password.trim();
-        int minLength = serviceProperties.getPasswordMinLength();
-
-        if (cleanPassword.length() < minLength) {
-            throw new UserExceptions.InvalidPasswordException(
-                    "Password must be at least " + minLength + " characters long");
         }
 
         log.debug("Password validation successful");

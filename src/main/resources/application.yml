@@ -34,7 +34,6 @@ orion:
     minimum-number-of-calls: ${SERVICE_MIN_CALLS:5}
     wait-duration-in-open-state: ${SERVICE_CIRCUIT_WAIT:30s}
     strict-email-validation: ${USER_STRICT_EMAIL_VALIDATION:false}
-    password-min-length: ${USER_PASSWORD_MIN_LENGTH:4}
     require-strong-password: ${USER_REQUIRE_STRONG_PASSWORD:true}
 
 # Logging Configuration - Uses centralized variables

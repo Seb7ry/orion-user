@@ -56,10 +56,4 @@ public class ServiceProperties {
      * Email validation configuration
      */
     private boolean strictEmailValidation = true;
-    private String emailDomain = "@unibague.edu.co";
-
-    /**
-     * Password policy configuration
-     */
-    private int passwordMinLength = 8;
 }
