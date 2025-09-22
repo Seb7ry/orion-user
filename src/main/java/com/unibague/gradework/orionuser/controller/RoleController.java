@@ -3,258 +3,171 @@ package com.unibague.gradework.orionuser.controller;
 import com.unibague.gradework.orionuser.model.Role;
 import com.unibague.gradework.orionuser.service.IRoleService;
 import com.unibague.gradework.orionuser.security.UserContext;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
- * Enhanced RoleController with authentication and authorization
- * Most operations are admin-only for security
+ * RoleController con soporte para llamadas internas S2S (gateway/orion-auth).
+ * - Si viene con X-Internal-Request=true o X-Service-Request=true -> se permite sin UserContext.
+ * - Para usuarios finales sigue aplicando UserContext (coordinador/admin).
+ * - Soporta ambos paths: /api/roles y /service/role
  */
 @Slf4j
 @RestController
-@RequestMapping("/service/role")
+@RequestMapping({"/api/roles", "/service/role"})
 public class RoleController {
 
     @Autowired
     private IRoleService roleService;
 
-    // ==========================================
-    // BASIC CRUD OPERATIONS
-    // ==========================================
+    /* ===================== Helpers ===================== */
 
-    /**
-     * Creates a new role
-     * SECURITY: Only ADMINS can create roles
-     */
+    private boolean isInternal(HttpServletRequest request) {
+        String internal = request.getHeader("X-Internal-Request");
+        String s2s = request.getHeader("X-Service-Request");
+        // true en texto plano (gateway y auth los envían así)
+        return "true".equalsIgnoreCase(internal) || "true".equalsIgnoreCase(s2s);
+    }
+
+    private void requireCoordinatorOrAdmin(UserContext.AuthenticatedUser user) {
+        if (!user.isCoordinator() && !user.isAdmin()) {
+            throw new SecurityException("Only coordinators and administrators can perform this action");
+        }
+    }
+
+    /* ===================== CRUD ===================== */
+
     @PostMapping
-    public ResponseEntity<?> createRole(@Valid @RequestBody Role role) {
+    public ResponseEntity<?> createRole(@Valid @RequestBody Role role, HttpServletRequest request) {
         try {
-            UserContext.requireAdmin();
-            UserContext.AuthenticatedUser currentUser = UserContext.getCurrentUser().get();
-
-            log.info("Creating role: {} by admin: {}", role.getName(), currentUser.getUserId());
-
+            if (!isInternal(request)) {
+                UserContext.requireAdmin();
+            }
             Role created = roleService.createRole(role);
-
-            log.info("Role created successfully: {} by admin: {}",
-                    created.getName(), currentUser.getUserId());
-
             return ResponseEntity.status(HttpStatus.CREATED).body(created);
-
         } catch (SecurityException e) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of(
-                            "error", "ADMIN_REQUIRED",
-                            "message", "Only administrators can create roles"
-                    ));
+            return ResponseEntity.status(isInternal(request) ? HttpStatus.FORBIDDEN : HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "ADMIN_REQUIRED", "message", "Only administrators can create roles"));
         }
     }
 
-    /**
-     * Retrieves all roles
-     * SECURITY: COORDINATORS and ADMINS can view roles
-     */
     @GetMapping
-    public ResponseEntity<?> getAllRoles() {
+    public ResponseEntity<?> getAllRoles(HttpServletRequest request) {
         try {
-            UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
-
-            // Only coordinators and admins can view roles
-            if (!currentUser.isCoordinator() && !currentUser.isAdmin()) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of(
-                                "error", "INSUFFICIENT_PERMISSIONS",
-                                "message", "Only coordinators and administrators can view roles"
-                        ));
+            if (!isInternal(request)) {
+                UserContext.AuthenticatedUser user = UserContext.requireAuthentication();
+                requireCoordinatorOrAdmin(user);
             }
-
-            log.debug("Retrieving all roles for user: {} ({})",
-                    currentUser.getUserId(), currentUser.getRole());
-
             List<Role> roles = roleService.getAllRoles();
-
             return ResponseEntity.ok(roles);
-
         } catch (SecurityException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "AUTHENTICATION_REQUIRED", "message", e.getMessage()));
         }
     }
 
-    /**
-     * Retrieves a role by its ID
-     * SECURITY: COORDINATORS and ADMINS can view individual roles
-     */
     @GetMapping("/{id}")
-    public ResponseEntity<?> getRoleById(@PathVariable String id) {
+    public ResponseEntity<?> getRoleById(@PathVariable String id, HttpServletRequest request) {
         try {
-            UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
-
-            // Only coordinators and admins can view roles
-            if (!currentUser.isCoordinator() && !currentUser.isAdmin()) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of(
-                                "error", "INSUFFICIENT_PERMISSIONS",
-                                "message", "Only coordinators and administrators can view roles"
-                        ));
+            if (!isInternal(request)) {
+                UserContext.AuthenticatedUser user = UserContext.requireAuthentication();
+                requireCoordinatorOrAdmin(user);
             }
-
-            log.debug("Retrieving role {} for user: {} ({})",
-                    id, currentUser.getUserId(), currentUser.getRole());
-
-            Role role = roleService.getRoleById(id)
-                    .orElseThrow(() -> new IllegalArgumentException("Role not found with ID: " + id));
-
-            return ResponseEntity.ok(role);
-
+            Optional<Role> role = roleService.getRoleById(id);
+            return role.<ResponseEntity<?>>map(ResponseEntity::ok)
+                    .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                            .body(Map.of("error", "NOT_FOUND", "message", "Role not found with ID: " + id)));
         } catch (SecurityException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "AUTHENTICATION_REQUIRED", "message", e.getMessage()));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("error", "NOT_FOUND", "message", e.getMessage()));
         }
     }
 
     /**
-     * Retrieves a role by its name
-     * SECURITY: COORDINATORS and ADMINS can view roles by name (used for auth)
+     * Endpoint usado por auth: GET /api/roles/name/{name}
+     * - Permite llamadas internas del auth/gateway sin UserContext.
+     * - Para usuarios finales exige coordinador/admin.
      */
     @GetMapping("/name/{name}")
-    public ResponseEntity<?> getRoleByName(@PathVariable String name) {
+    public ResponseEntity<?> getRoleByName(@PathVariable String name, HttpServletRequest request) {
         try {
-            UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
-
-            // Only coordinators and admins can view roles
-            if (!currentUser.isCoordinator() && !currentUser.isAdmin()) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of(
-                                "error", "INSUFFICIENT_PERMISSIONS",
-                                "message", "Only coordinators and administrators can view roles"
-                        ));
+            if (!isInternal(request)) {
+                UserContext.AuthenticatedUser user = UserContext.requireAuthentication();
+                requireCoordinatorOrAdmin(user);
             }
-
-            log.debug("Retrieving role by name: {} for user: {} ({})",
-                    name, currentUser.getUserId(), currentUser.getRole());
-
-            Role role = roleService.getRoleByName(name)
-                    .orElseThrow(() -> new IllegalArgumentException("Role not found with name: " + name));
-
-            return ResponseEntity.ok(role);
-
+            if (!StringUtils.hasText(name)) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "VALIDATION_ERROR", "message", "Role name is required"));
+            }
+            Optional<Role> role = roleService.getRoleByName(name);
+            return role.<ResponseEntity<?>>map(ResponseEntity::ok)
+                    .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                            .body(Map.of("error", "NOT_FOUND", "message", "Role not found with name: " + name)));
         } catch (SecurityException e) {
+            // OJO: antes devolvías 401 aquí; eso rompía al auth (S2S). Con isInternal() ya no caerá aquí.
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "AUTHENTICATION_REQUIRED", "message", e.getMessage()));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("error", "NOT_FOUND", "message", e.getMessage()));
         }
     }
 
-    /**
-     * Updates an existing role by its ID
-     * SECURITY: Only ADMINS can update roles
-     */
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateRole(@PathVariable String id, @Valid @RequestBody Role roleDetails) {
+    public ResponseEntity<?> updateRole(@PathVariable String id,
+                                        @Valid @RequestBody Role roleDetails,
+                                        HttpServletRequest request) {
         try {
-            UserContext.requireAdmin();
-            UserContext.AuthenticatedUser currentUser = UserContext.getCurrentUser().get();
-
-            log.info("Updating role: {} by admin: {}", id, currentUser.getUserId());
-
+            if (!isInternal(request)) {
+                UserContext.requireAdmin();
+            }
             Role updated = roleService.updateRole(id, roleDetails)
                     .orElseThrow(() -> new IllegalArgumentException("Role not found with ID: " + id));
-
-            log.info("Role updated successfully: {} -> {} by admin: {}",
-                    id, updated.getName(), currentUser.getUserId());
-
             return ResponseEntity.ok(updated);
-
         } catch (SecurityException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of(
-                            "error", "ADMIN_REQUIRED",
-                            "message", "Only administrators can update roles"
-                    ));
+                    .body(Map.of("error", "ADMIN_REQUIRED", "message", "Only administrators can update roles"));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", "NOT_FOUND", "message", e.getMessage()));
         }
     }
 
-    /**
-     * Deletes a role by its ID
-     * SECURITY: Only ADMINS can delete roles
-     */
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteRole(@PathVariable String id) {
+    public ResponseEntity<?> deleteRole(@PathVariable String id, HttpServletRequest request) {
         try {
-            UserContext.requireAdmin();
-            UserContext.AuthenticatedUser currentUser = UserContext.getCurrentUser().get();
-
-            // Get role info for logging
-            Role existingRole = roleService.getRoleById(id)
-                    .orElseThrow(() -> new IllegalArgumentException("Role not found with ID: " + id));
-
-            log.warn("DELETING ROLE: {} ({}) by admin: {}",
-                    id, existingRole.getName(), currentUser.getUserId());
-
+            if (!isInternal(request)) {
+                UserContext.requireAdmin();
+            }
             roleService.deleteRole(id);
-
-            log.warn("Role deleted successfully: {} by admin: {}",
-                    existingRole.getName(), currentUser.getUserId());
-
             return ResponseEntity.noContent().build();
-
         } catch (SecurityException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of(
-                            "error", "ADMIN_REQUIRED",
-                            "message", "Only administrators can delete roles"
-                    ));
+                    .body(Map.of("error", "ADMIN_REQUIRED", "message", "Only administrators can delete roles"));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", "NOT_FOUND", "message", e.getMessage()));
         }
     }
 
-    // ==========================================
-    // PERMISSION MANAGEMENT ENDPOINTS
-    // ==========================================
+    /* ============ Permisos y utilitarios (mismo patrón) ============ */
 
-    /**
-     * Gets all permissions for a specific role
-     * SECURITY: COORDINATORS and ADMINS can view permissions
-     */
     @GetMapping("/{roleId}/permissions")
-    public ResponseEntity<?> getRolePermissions(@PathVariable String roleId) {
+    public ResponseEntity<?> getRolePermissions(@PathVariable String roleId, HttpServletRequest request) {
         try {
-            UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
-
-            // Only coordinators and admins can view permissions
-            if (!currentUser.isCoordinator() && !currentUser.isAdmin()) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of(
-                                "error", "INSUFFICIENT_PERMISSIONS",
-                                "message", "Only coordinators and administrators can view permissions"
-                        ));
+            if (!isInternal(request)) {
+                UserContext.AuthenticatedUser user = UserContext.requireAuthentication();
+                requireCoordinatorOrAdmin(user);
             }
-
-            log.debug("Retrieving permissions for role: {} by user: {} ({})",
-                    roleId, currentUser.getUserId(), currentUser.getRole());
-
             List<String> permissions = roleService.getRolePermissions(roleId);
-
             return ResponseEntity.ok(permissions);
-
         } catch (SecurityException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "AUTHENTICATION_REQUIRED", "message", e.getMessage()));
@@ -264,148 +177,57 @@ public class RoleController {
         }
     }
 
-    /**
-     * Adds a permission to a role
-     * SECURITY: Only ADMINS can modify permissions
-     */
     @PostMapping("/{roleId}/permissions")
     public ResponseEntity<?> addPermissionToRole(@PathVariable String roleId,
-                                                 @RequestBody Map<String, String> request) {
+                                                 @RequestBody Map<String, String> requestBody,
+                                                 HttpServletRequest request) {
         try {
-            UserContext.requireAdmin();
-            UserContext.AuthenticatedUser currentUser = UserContext.getCurrentUser().get();
-
-            String permission = request.get("permission");
-            if (permission == null || permission.isBlank()) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(Map.of(
-                                "error", "VALIDATION_ERROR",
-                                "message", "Permission is required"
-                        ));
+            if (!isInternal(request)) {
+                UserContext.requireAdmin();
             }
-
-            log.info("Adding permission '{}' to role {} by admin: {}",
-                    permission, roleId, currentUser.getUserId());
-
-            Role updatedRole = roleService.addPermissionToRole(roleId, permission);
-
-            log.info("Permission '{}' added successfully to role {} by admin: {}",
-                    permission, roleId, currentUser.getUserId());
-
-            return ResponseEntity.ok(updatedRole);
-
+            String permission = requestBody.get("permission");
+            if (!StringUtils.hasText(permission)) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "VALIDATION_ERROR", "message", "Permission is required"));
+            }
+            Role updated = roleService.addPermissionToRole(roleId, permission);
+            return ResponseEntity.ok(updated);
         } catch (SecurityException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of(
-                            "error", "ADMIN_REQUIRED",
-                            "message", "Only administrators can modify permissions"
-                    ));
+                    .body(Map.of("error", "ADMIN_REQUIRED", "message", "Only administrators can modify permissions"));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", "NOT_FOUND", "message", e.getMessage()));
         }
     }
 
-    /**
-     * Removes a permission from a role
-     * SECURITY: Only ADMINS can modify permissions
-     */
     @DeleteMapping("/{roleId}/permissions/{permission}")
     public ResponseEntity<?> removePermissionFromRole(@PathVariable String roleId,
-                                                      @PathVariable String permission) {
+                                                      @PathVariable String permission,
+                                                      HttpServletRequest request) {
         try {
-            UserContext.requireAdmin();
-            UserContext.AuthenticatedUser currentUser = UserContext.getCurrentUser().get();
-
-            log.info("Removing permission '{}' from role {} by admin: {}",
-                    permission, roleId, currentUser.getUserId());
-
-            Role updatedRole = roleService.removePermissionFromRole(roleId, permission);
-
-            log.info("Permission '{}' removed successfully from role {} by admin: {}",
-                    permission, roleId, currentUser.getUserId());
-
-            return ResponseEntity.ok(updatedRole);
-
+            if (!isInternal(request)) {
+                UserContext.requireAdmin();
+            }
+            Role updated = roleService.removePermissionFromRole(roleId, permission);
+            return ResponseEntity.ok(updated);
         } catch (SecurityException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of(
-                            "error", "ADMIN_REQUIRED",
-                            "message", "Only administrators can modify permissions"
-                    ));
+                    .body(Map.of("error", "ADMIN_REQUIRED", "message", "Only administrators can modify permissions"));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", "NOT_FOUND", "message", e.getMessage()));
         }
     }
 
-    // ==========================================
-    // UTILITY ENDPOINTS
-    // ==========================================
-
-    /**
-     * Get role statistics (for admin dashboard)
-     * SECURITY: Only ADMINS can view role statistics
-     */
-    @GetMapping("/statistics")
-    public ResponseEntity<?> getRoleStatistics() {
-        try {
-            UserContext.requireAdmin();
-            UserContext.AuthenticatedUser currentUser = UserContext.getCurrentUser().get();
-
-            log.debug("Retrieving role statistics for admin: {}", currentUser.getUserId());
-
-            List<Role> allRoles = roleService.getAllRoles();
-
-            // Calculate statistics
-            int totalRoles = allRoles.size();
-            int rolesWithPermissions = (int) allRoles.stream()
-                    .filter(role -> role.getPermisos() != null && !role.getPermisos().isEmpty())
-                    .count();
-            int totalPermissions = allRoles.stream()
-                    .mapToInt(role -> role.getPermisos() != null ? role.getPermisos().size() : 0)
-                    .sum();
-
-            Map<String, Object> statistics = Map.of(
-                    "totalRoles", totalRoles,
-                    "rolesWithPermissions", rolesWithPermissions,
-                    "rolesWithoutPermissions", totalRoles - rolesWithPermissions,
-                    "totalPermissions", totalPermissions,
-                    "averagePermissionsPerRole", totalRoles > 0 ? (double) totalPermissions / totalRoles : 0,
-                    "requestedBy", currentUser.getUserId(),
-                    "requestedAt", java.time.LocalDateTime.now()
-            );
-
-            return ResponseEntity.ok(statistics);
-
-        } catch (SecurityException e) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of(
-                            "error", "ADMIN_REQUIRED",
-                            "message", "Only administrators can view role statistics"
-                    ));
-        }
-    }
-
-    /**
-     * Validate if a role exists (utility endpoint)
-     * SECURITY: All authenticated users can check if a role exists
-     */
     @GetMapping("/{roleId}/exists")
-    public ResponseEntity<?> roleExists(@PathVariable String roleId) {
+    public ResponseEntity<?> roleExists(@PathVariable String roleId, HttpServletRequest request) {
         try {
-            UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
-
-            log.debug("Checking existence of role: {} for user: {}", roleId, currentUser.getUserId());
-
+            if (!isInternal(request)) {
+                UserContext.requireAuthentication();
+            }
             boolean exists = roleService.getRoleById(roleId).isPresent();
-
-            return ResponseEntity.ok(Map.of(
-                    "roleId", roleId,
-                    "exists", exists,
-                    "checkedBy", currentUser.getUserId()
-            ));
-
+            return ResponseEntity.ok(Map.of("roleId", roleId, "exists", exists));
         } catch (SecurityException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "AUTHENTICATION_REQUIRED", "message", e.getMessage()));

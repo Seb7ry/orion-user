@@ -36,6 +36,10 @@ orion:
     strict-email-validation: ${USER_STRICT_EMAIL_VALIDATION:false}
     require-strong-password: ${USER_REQUIRE_STRONG_PASSWORD:true}
 
+gateway:
+  service:
+    token: ${GATEWAY_SERVICE_TOKEN:dev-token-unibague-orion}
+
 # Logging Configuration - Uses centralized variables
 logging:
   level:

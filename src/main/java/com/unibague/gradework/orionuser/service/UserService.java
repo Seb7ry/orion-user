@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.security.SecureRandom;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -21,6 +22,8 @@ public class UserService implements IUserService {
     private final PasswordEncoder passwordEncoder;
     private final IValidationService validationService;
 
+    private static final int AUTO_PWD_BYTES = 24; // ~32 chars base64-url
+
     public UserService(IProgramService programService,
                        StudentRepository studentRepository,
                        ActorRepository actorRepository,
@@ -33,6 +36,31 @@ public class UserService implements IUserService {
         this.validationService = validationService;
     }
 
+    // ============ HELPERS ============
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
+    }
+
+    /** Genera una contraseña aleatoria segura (para cumplir NOT NULL) */
+    private static String generateRandomPassword() {
+        byte[] bytes = new byte[AUTO_PWD_BYTES];
+        new SecureRandom().nextBytes(bytes);
+        // Base64 URL-safe sin padding, corta y robusta
+        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private String passwordToPersist(String rawPasswordOrNull) {
+        String raw = rawPasswordOrNull;
+        if (isBlank(raw)) {
+            raw = generateRandomPassword();
+            log.debug("Generando password interno para cuenta federada (SSO)");
+        }
+        return passwordEncoder.encode(raw);
+    }
+
+    // ============ CREATE ============
+
     @Override
     public Student createStudent(Student student) {
         log.info("Creating student - ID: {}, Email: {}, Programs: {}",
@@ -41,15 +69,26 @@ public class UserService implements IUserService {
 
         validationService.validateIdUser(student.getIdUser());
         validationService.validateEmail(student.getEmail());
-        validationService.validatePassword(student.getPassword());
         validationService.validateStudentId(student.getStudentID());
 
-        if (!student.isStatus()) {
-            throw new UserExceptions.InvalidUserDataException("Status is not valid");
+        // Contraseña:
+        // - Si viene por credenciales locales => validar contraseña.
+        // - Si viene por SSO (Google) y viene vacía => NO validar y generar interna.
+        if (!isBlank(student.getPassword())) {
+            validationService.validatePassword(student.getPassword());
+        } else {
+            log.info("Creación de estudiante sin contraseña detectada (flujo federado/SSO).");
         }
 
+        // Estado por defecto: si no usas wrapper Boolean, al menos no rechazar 'false' por defecto.
+        // El check anterior tiraba error si venía en false:
+        // if (!student.isStatus()) { throw ... }
+        // Lo eliminamos para permitir que el status venga establecido por quien llama.
+        // Si quieres forzar true por defecto:
+        // student.setStatus(student.isStatus() || true);
+
         student.setRole(validationService.validateRole(student.getRole()));
-        student.setPassword(passwordEncoder.encode(student.getPassword()));
+        student.setPassword(passwordToPersist(student.getPassword()));
 
         if (student.getPrograms() != null && !student.getPrograms().isEmpty()) {
             student.setPrograms(student.getPrograms());
@@ -70,10 +109,16 @@ public class UserService implements IUserService {
 
         validationService.validateIdUser(actor.getIdUser());
         validationService.validateEmail(actor.getEmail());
-        validationService.validatePassword(actor.getPassword());
+
+        // Contraseña local vs federada
+        if (!isBlank(actor.getPassword())) {
+            validationService.validatePassword(actor.getPassword());
+        } else {
+            log.info("Creación de actor sin contraseña detectada (flujo federado/SSO).");
+        }
 
         actor.setRole(validationService.validateRole(actor.getRole()));
-        actor.setPassword(passwordEncoder.encode(actor.getPassword()));
+        actor.setPassword(passwordToPersist(actor.getPassword()));
 
         if (actor.getPrograms() != null && !actor.getPrograms().isEmpty()) {
             actor.setPrograms(actor.getPrograms());
@@ -85,6 +130,8 @@ public class UserService implements IUserService {
         log.info("Actor created successfully with ID: {}", saved.getIdUser());
         return saved;
     }
+
+    // ============ READ LISTS ============
 
     @Override
     public List<StudentDTO> getAllStudentsDTO() {
@@ -135,6 +182,8 @@ public class UserService implements IUserService {
         }).collect(Collectors.toList());
     }
 
+    // ============ READ SINGLE DTO ============
+
     @Override
     public Optional<StudentDTO> getStudentDTOById(String id) {
         log.debug("Retrieving student DTO by ID: {}", id);
@@ -180,6 +229,8 @@ public class UserService implements IUserService {
                     .build();
         });
     }
+
+    // ============ READ ENTITIES ============
 
     @Override
     public Optional<Student> getStudentById(String id) {
@@ -246,6 +297,8 @@ public class UserService implements IUserService {
         return Optional.empty();
     }
 
+    // ============ UPDATE ============
+
     @Override
     public Student updateStudent(String id, Student studentDetails) {
         log.info("Updating student with ID: {}", id);
@@ -269,7 +322,7 @@ public class UserService implements IUserService {
         existing.setStatus(studentDetails.isStatus());
         existing.setSemester(studentDetails.getSemester());
 
-        if (studentDetails.getPassword() != null && !studentDetails.getPassword().isBlank()) {
+        if (!isBlank(studentDetails.getPassword())) {
             existing.setPassword(passwordEncoder.encode(studentDetails.getPassword()));
         }
 
@@ -299,7 +352,7 @@ public class UserService implements IUserService {
         existing.setPrograms(Optional.ofNullable(actorDetails.getPrograms()).orElse(List.of()));
         existing.setPosition(actorDetails.getPosition());
 
-        if (actorDetails.getPassword() != null && !actorDetails.getPassword().isBlank()) {
+        if (!isBlank(actorDetails.getPassword())) {
             existing.setPassword(passwordEncoder.encode(actorDetails.getPassword()));
         }
 
@@ -307,6 +360,8 @@ public class UserService implements IUserService {
         log.info("Actor updated successfully: {}", id);
         return saved;
     }
+
+    // ============ DELETE ============
 
     @Override
     public void deleteStudent(String id) {

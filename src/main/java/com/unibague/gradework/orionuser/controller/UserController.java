@@ -3,6 +3,7 @@ package com.unibague.gradework.orionuser.controller;
 import com.unibague.gradework.orionuser.model.*;
 import com.unibague.gradework.orionuser.service.*;
 import com.unibague.gradework.orionuser.security.UserContext;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -25,42 +26,53 @@ public class UserController {
     @Autowired private IUserService userService;
     @Autowired private IRoleService roleService;
 
+    // Helper para detectar llamadas internas S2S desde el gateway/orion-auth
+    private boolean isInternal(HttpServletRequest req) {
+        String a = req.getHeader("X-Internal-Request");
+        String b = req.getHeader("X-Service-Request");
+        return "true".equalsIgnoreCase(a) || "true".equalsIgnoreCase(b);
+    }
+
     // ==========================================
     // STUDENT MANAGEMENT
     // ==========================================
 
     /**
      * Creates a new student
-     * SECURITY: Only COORDINATORS and ADMINS can create students
+     * SECURITY:
+     *  - S2S (ROLE_SERVICE): permitido (creación automática desde auth)
+     *  - Usuarios humanos: solo COORDINATOR o ADMIN
      */
     @PostMapping("/student")
-    public ResponseEntity<?> createStudent(@RequestBody Student student) {
+    public ResponseEntity<?> createStudent(@RequestBody Student student, HttpServletRequest req) {
         try {
-            UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
+            if (!isInternal(req)) {
+                // Flujo usuario humano vía JWT
+                UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
 
-            // Check permissions - only coordinators and admins can create students
-            if (!currentUser.isCoordinator() && !currentUser.isAdmin()) {
-                log.warn("UNAUTHORIZED: User {} ({}) attempted to create student",
-                        currentUser.getUserId(), currentUser.getRole());
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of(
-                                "error", "INSUFFICIENT_PERMISSIONS",
-                                "message", "Only coordinators and administrators can create students"
-                        ));
+                if (!currentUser.isCoordinator() && !currentUser.isAdmin()) {
+                    log.warn("UNAUTHORIZED: User {} ({}) attempted to create student",
+                            currentUser.getUserId(), currentUser.getRole());
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(Map.of(
+                                    "error", "INSUFFICIENT_PERMISSIONS",
+                                    "message", "Only coordinators and administrators can create students"
+                            ));
+                }
+                log.info("Creating student (user flow): {} by user: {} ({})",
+                        student.getEmail(), currentUser.getUserId(), currentUser.getRole());
+            } else {
+                // Flujo S2S
+                log.info("Creating student (S2S): {}", student.getEmail());
             }
 
-            // Validate role
+            // Validación de rol (por id) — si solo tienes el nombre, haz lookup previo por nombre
             Role role = roleService.getRoleById(student.getRole().getIdRole())
                     .orElseThrow(() -> new IllegalArgumentException("Invalid role ID: " + student.getRole().getIdRole()));
             student.setRole(role);
 
-            log.info("Creating student: {} by user: {} ({})",
-                    student.getEmail(), currentUser.getUserId(), currentUser.getRole());
-
             Student created = userService.createStudent(student);
-
-            log.info("Student created successfully: {} by user: {}",
-                    created.getIdUser(), currentUser.getUserId());
+            log.info("Student created successfully: {}", created.getIdUser());
 
             return ResponseEntity.status(HttpStatus.CREATED).body(created);
 
@@ -75,36 +87,38 @@ public class UserController {
 
     /**
      * Creates a new actor (teacher/staff)
-     * SECURITY: Only COORDINATORS and ADMINS can create actors
+     * SECURITY:
+     *  - S2S (ROLE_SERVICE): permitido (creación automática desde auth)
+     *  - Usuarios humanos: solo COORDINATOR o ADMIN
      */
     @PostMapping("/actor")
-    public ResponseEntity<?> createActor(@RequestBody Actor actor) {
+    public ResponseEntity<?> createActor(@RequestBody Actor actor, HttpServletRequest req) {
         try {
-            UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
+            if (!isInternal(req)) {
+                UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
 
-            // Check permissions - only coordinators and admins can create actors
-            if (!currentUser.isCoordinator() && !currentUser.isAdmin()) {
-                log.warn("UNAUTHORIZED: User {} ({}) attempted to create actor",
-                        currentUser.getUserId(), currentUser.getRole());
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of(
-                                "error", "INSUFFICIENT_PERMISSIONS",
-                                "message", "Only coordinators and administrators can create actors"
-                        ));
+                if (!currentUser.isCoordinator() && !currentUser.isAdmin()) {
+                    log.warn("UNAUTHORIZED: User {} ({}) attempted to create actor",
+                            currentUser.getUserId(), currentUser.getRole());
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(Map.of(
+                                    "error", "INSUFFICIENT_PERMISSIONS",
+                                    "message", "Only coordinators and administrators can create actors"
+                            ));
+                }
+                log.info("Creating actor (user flow): {} by user: {} ({})",
+                        actor.getEmail(), currentUser.getUserId(), currentUser.getRole());
+            } else {
+                log.info("Creating actor (S2S): {}", actor.getEmail());
             }
 
-            // Validate role
+            // Validación de rol (por id)
             Role role = roleService.getRoleById(actor.getRole().getIdRole())
                     .orElseThrow(() -> new IllegalArgumentException("Invalid role ID: " + actor.getRole().getIdRole()));
             actor.setRole(role);
 
-            log.info("Creating actor: {} with position: {} by user: {} ({})",
-                    actor.getEmail(), actor.getPosition(), currentUser.getUserId(), currentUser.getRole());
-
             Actor created = userService.createActor(actor);
-
-            log.info("Actor created successfully: {} by user: {}",
-                    created.getIdUser(), currentUser.getUserId());
+            log.info("Actor created successfully: {}", created.getIdUser());
 
             return ResponseEntity.status(HttpStatus.CREATED).body(created);
 
@@ -134,7 +148,6 @@ public class UserController {
         try {
             UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
 
-            // Students cannot view student lists
             if (currentUser.isStudent()) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body(Map.of(
@@ -148,7 +161,6 @@ public class UserController {
 
             List<StudentDTO> students = userService.getAllStudentsDTO();
 
-            // Filter students based on user access (unless admin)
             if (!currentUser.isAdmin()) {
                 students = students.stream()
                         .filter(student -> student.getPrograms().stream()
@@ -175,7 +187,6 @@ public class UserController {
         try {
             UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
 
-            // Only coordinators and admins can view actor lists
             if (!currentUser.isCoordinator() && !currentUser.isAdmin()) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body(Map.of(
@@ -189,7 +200,6 @@ public class UserController {
 
             List<ActorDTO> actors = userService.getAllActorsDTO();
 
-            // Filter actors based on user access (unless admin)
             if (!currentUser.isAdmin()) {
                 actors = actors.stream()
                         .filter(actor -> actor.getPrograms().stream()
@@ -211,7 +221,6 @@ public class UserController {
 
     /**
      * Retrieves student by ID with access control
-     * SECURITY: Users can access students in their programs or their own data
      */
     @GetMapping("/student/{id}")
     public ResponseEntity<?> getStudentDTOById(@PathVariable String id) {
@@ -224,9 +233,7 @@ public class UserController {
             StudentDTO student = userService.getStudentDTOById(id)
                     .orElseThrow(() -> new IllegalArgumentException("Student not found with ID: " + id));
 
-            // Check access permissions
             if (!currentUser.isAdmin() && !currentUser.getUserId().equals(id)) {
-                // Non-admin, non-self access requires program overlap
                 boolean hasAccess = student.getPrograms().stream()
                         .anyMatch(program -> currentUser.hasAccessToProgram(program.getProgramId()));
 
@@ -266,7 +273,6 @@ public class UserController {
             ActorDTO actor = userService.getActorDTOById(id)
                     .orElseThrow(() -> new IllegalArgumentException("Actor not found with ID: " + id));
 
-            // Check access permissions (similar to student but more permissive)
             if (!currentUser.isAdmin() && !currentUser.isCoordinator() &&
                     !currentUser.getUserId().equals(id)) {
 
@@ -298,7 +304,6 @@ public class UserController {
      */
     @GetMapping("/student/auth/{id}")
     public ResponseEntity<?> getStudentById(@PathVariable String id) {
-        // This endpoint is used by auth service - less restrictive
         try {
             UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
 
@@ -349,7 +354,6 @@ public class UserController {
         try {
             UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
 
-            // Check if user is accessing their own data or is admin
             if (!currentUser.isAdmin() && !currentUser.getUserId().equals(userId)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body(Map.of(
@@ -384,14 +388,12 @@ public class UserController {
     @GetMapping("/auth/email/{email}")
     public ResponseEntity<?> getUserByEmail(@PathVariable String email) {
         try {
-            // Check if request comes from authenticated user context (Gateway)
+            // Si hay user autenticado (flujo humano), solo su propio email o admin
             Optional<UserContext.AuthenticatedUser> currentUserOpt = UserContext.getCurrentUser();
 
             if (currentUserOpt.isPresent()) {
-                // User is authenticated through Gateway - apply normal security
                 UserContext.AuthenticatedUser currentUser = currentUserOpt.get();
 
-                // Only allow access to own email or admin access
                 if (!currentUser.isAdmin() && !currentUser.getUserId().equals(email)) {
                     log.warn("Unauthorized email access attempt: {} requested by {}",
                             email, currentUser.getUserId());
@@ -404,10 +406,8 @@ public class UserController {
 
                 log.debug("Authenticated user {} requesting email: {}", currentUser.getUserId(), email);
             } else {
-                // No authenticated user context - this is likely internal auth service call
+                // Flujo S2S (internal auth service)
                 log.debug("Internal auth service request for email: {}", email);
-
-                // For internal authentication service calls, allow direct access
                 return userService.findUserByEmail(email)
                         .map(user -> {
                             log.debug("User found for internal auth request: {}", user.getIdUser());
@@ -416,7 +416,7 @@ public class UserController {
                         .orElseThrow(() -> new IllegalArgumentException("User not found with email: " + email));
             }
 
-            // Normal authenticated flow
+            // Flujo normal autenticado
             log.debug("User by email {} requested by authenticated user", email);
 
             return userService.findUserByEmail(email)
@@ -446,9 +446,7 @@ public class UserController {
         try {
             UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
 
-            // Check if user can update this student
             if (!currentUser.isAdmin() && !currentUser.getUserId().equals(id)) {
-                // Coordinators can update students in their programs
                 if (currentUser.isCoordinator()) {
                     StudentDTO existingStudent = userService.getStudentDTOById(id)
                             .orElseThrow(() -> new IllegalArgumentException("Student not found"));
@@ -495,7 +493,6 @@ public class UserController {
         try {
             UserContext.AuthenticatedUser currentUser = UserContext.requireAuthentication();
 
-            // Check permissions
             if (!currentUser.isAdmin() && !currentUser.getUserId().equals(id) &&
                     !currentUser.isCoordinator()) {
 
